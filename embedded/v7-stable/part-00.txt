@@ -1,0 +1,35 @@
+import { createRequire } from "node:module";
+const require = createRequire(process.cwd() + "/package.json");
+const { pancakeFetchConversations, pancakeBuildCustomerRow } = require(process.cwd() + "/v7-pancake-service.cjs");
+
+const cache = { accounts: null, pancake: new Map(), ads: new Map(), daily: new Map() };
+const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v23.0";
+const META_TOKEN = process.env.META_ACCESS_TOKEN || process.env.META_USER_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN || process.env.USER_ACCESS_TOKEN || "";
+const META_AUTO = String(process.env.META_AUTO_AD_ACCOUNTS || "true").toLowerCase() !== "false";
+const META_IDS = process.env.META_AD_ACCOUNT_IDS || process.env.META_AD_ACCOUNTS || process.env.META_AD_ACCOUNT_ID || "";
+const TAX_MULTIPLIER = Number(process.env.META_SPEND_TAX_MULTIPLIER || 1) || 1;
+const TZ = process.env.META_ACCOUNT_TIMEZONE || "Asia/Ho_Chi_Minh";
+const TTL = 5 * 60 * 1000;
+
+const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+const money = v => `${Math.round(Number(v || 0)).toLocaleString("vi-VN")} đ`;
+const act = v => { const s = String(v || "").trim(); return s ? (s.startsWith("act_") ? s : `act_${s}`) : ""; };
+const dateKey = (d, tz = "Asia/Ho_Chi_Minh") => { const x = new Date(d); return Number.isNaN(x.getTime()) ? "" : x.toLocaleDateString("en-CA", { timeZone: tz }); };
+const today = offset => { const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const csv = value => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+function parseIds(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return [];
+  try {
+    const j = JSON.parse(value);
+    if (Array.isArray(j)) return j.map(x => typeof x === "string" ? { id: x } : x);
+    if (j && typeof j === "object") return Object.entries(j).map(([id, x]) => typeof x === "object" ? { id, ...x } : { id, name: String(x) });
+  } catch {}
+  return value.split(/[;,\n]+/).map(x => x.trim()).filter(Boolean).map(id => ({ id }));
+}
+
+async function fetchJson(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(45_000), cache: "no-store" });
+  const text = await r.text();
+  let j; try { j = JSON.parse(text); } catch { j = { raw: text.slice(0, 500) }; }
