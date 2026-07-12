@@ -1,0 +1,13 @@
+  if (!r.ok || j?.error) throw new Error(j?.error?.message || j?.message || `HTTP ${r.status}`);
+  return j;
+}
+
+async function pages(url, max = 20) {
+  const out = []; let next = url; let n = 0;
+  while (next && n++ < max) {
+    const j = await fetchJson(next);
+    out.push(...(j.data || []));
+    next = j?.paging?.next || "";
+  }
+  return out;
+}
