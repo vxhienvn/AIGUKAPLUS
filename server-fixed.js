@@ -14,6 +14,7 @@ const SUPABASE_PUBLIC_KEY =
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   "";
+const TEST_SESSION_VALUE = "AIGUKA_RAILWAY_TEST_MODE";
 
 const pageRoutes = new Map([
   ["/", "aiguka-v8-admin"],
@@ -38,10 +39,8 @@ function setProxyAuth(proxyReq, req) {
       proxyReq.setHeader("authorization", `Bearer ${SUPABASE_PUBLIC_KEY}`);
     }
   }
-  const adminSecret = req.headers["x-aiguka-admin-secret"];
-  if (adminSecret) {
-    proxyReq.setHeader("x-aiguka-admin-secret", String(adminSecret));
-  }
+  proxyReq.setHeader("x-aiguka-railway-test", "enabled");
+  proxyReq.setHeader("x-aiguka-admin-secret", TEST_SESSION_VALUE);
 }
 
 const proxyCommon = {
@@ -81,7 +80,7 @@ app.use(
 
 function repairBrokenInterpolations(input) {
   let html = input;
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const before = html;
     html = html.replace(/''\+(.+?)\+''/g, (_match, expression) => {
       return `\\''+${expression}+'\\'`;
@@ -89,6 +88,32 @@ function repairBrokenInterpolations(input) {
     if (html === before) break;
   }
   return html;
+}
+
+function forceSameOrigin(input) {
+  return input.split(SUPABASE_URL).join("");
+}
+
+function injectTestBootstrap(html) {
+  const script = `<script id="aiguka-test-bootstrap">
+(function(){
+  const TEST_VALUE=${JSON.stringify(TEST_SESSION_VALUE)};
+  try{sessionStorage.setItem('aiguka_admin_secret',TEST_VALUE);}catch(_){ }
+  window.__AIGUKA_TEST_MODE__=true;
+  const nativePrompt=window.prompt.bind(window);
+  window.prompt=function(message,defaultValue){
+    if(/mã quản trị|ma quan tri|admin secret/i.test(String(message||''))){
+      try{sessionStorage.setItem('aiguka_admin_secret',TEST_VALUE);}catch(_){ }
+      return TEST_VALUE;
+    }
+    return nativePrompt(message,defaultValue);
+  };
+})();
+</script>`;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, `<head$1>${script}`);
+  }
+  return `${script}${html}`;
 }
 
 function validateInlineScripts(html) {
@@ -118,13 +143,9 @@ function validateInlineScripts(html) {
 
 function injectRuntimeUi(html, scriptErrors) {
   const errorCount = scriptErrors.length;
-  const errorMessage = errorCount
-    ? `Giao diện còn ${errorCount} lỗi JavaScript`
-    : "Giao diện sẵn sàng";
-
   const injection = `
 <style id="aiguka-runtime-feedback-style">
-#aiguka-runtime-state{position:fixed;right:12px;bottom:12px;z-index:2147483647;padding:9px 12px;border-radius:999px;background:#344054;color:#fff;font:600 13px Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.22);cursor:pointer;user-select:none}
+#aiguka-runtime-state{position:fixed;right:12px;bottom:12px;z-index:2147483647;padding:9px 12px;border-radius:999px;background:#b54708;color:#fff;font:600 13px Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.22);user-select:none}
 #aiguka-runtime-state.ok{background:#067647}#aiguka-runtime-state.bad{background:#b42318}#aiguka-runtime-state.wait{background:#b54708}
 #aiguka-action-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483647;padding:10px 14px;border-radius:9px;background:#111827;color:#fff;font:600 13px Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.24);opacity:0;pointer-events:none;transition:opacity .16s ease}
 #aiguka-action-toast.show{opacity:1}
@@ -135,7 +156,7 @@ button,.btn,.nav,a[href],[role="button"]{transition:transform .08s ease,filter .
 </style>
 <div id="aiguka-action-toast">Đã nhận thao tác · đang xử lý…</div>
 <div id="aiguka-runtime-error"></div>
-<div id="aiguka-runtime-state" class="${errorCount ? "bad" : "wait"}" title="Bấm để kiểm tra kết nối dữ liệu">${errorMessage}</div>
+<div id="aiguka-runtime-state" class="${errorCount ? "bad" : "wait"}">${errorCount ? `Còn ${errorCount} lỗi JavaScript` : "Đang kết nối dữ liệu…"}</div>
 <script id="aiguka-runtime-feedback-script">
 (function(){
   const initialScriptErrors=${JSON.stringify(scriptErrors)};
@@ -165,55 +186,33 @@ button,.btn,.nav,a[href],[role="button"]{transition:transform .08s ease,filter .
     target.setAttribute('aria-busy','true');
     showToast('Đã nhận thao tác · đang xử lý…');
     setTimeout(function(){target.classList.remove('aiguka-clicked');target.removeAttribute('aria-busy');},650);
-    setTimeout(()=>checkDatabase(false),900);
+    setTimeout(()=>checkDatabase(false),850);
   },true);
-  window.addEventListener('error',function(event){
-    showError('Lỗi JavaScript: '+(event.message||'Không xác định'));
-  });
+  window.addEventListener('error',function(event){showError('Lỗi JavaScript: '+(event.message||'Không xác định'));});
   window.addEventListener('unhandledrejection',function(event){
     const reason=event.reason&&event.reason.message?event.reason.message:String(event.reason||'Không xác định');
     showError('Lỗi xử lý: '+reason);
   });
   async function checkDatabase(force){
     const now=Date.now();
-    if(checking||(!force&&now-lastCheck<5000))return;
-    lastCheck=now;
-    let secret=sessionStorage.getItem('aiguka_admin_secret')||'';
-    if(!secret){
-      state.className='wait';
-      state.textContent='Chưa nhập mã quản trị';
-      return;
-    }
-    checking=true;
-    state.className='wait';
-    state.textContent='Đang kiểm tra dữ liệu…';
+    if(checking||(!force&&now-lastCheck<4000))return;
+    lastCheck=now;checking=true;
+    state.className='wait';state.textContent='Đang kiểm tra dữ liệu…';
     try{
-      const response=await fetch('/__aiguka/db-check',{headers:{'x-aiguka-admin-secret':secret},cache:'no-store'});
+      const response=await fetch('/__aiguka/db-check',{cache:'no-store'});
       const data=await response.json().catch(()=>({}));
       if(!response.ok||!data.ok)throw new Error(data.error||('HTTP '+response.status));
-      state.className='ok';
-      state.textContent='Dữ liệu đã kết nối';
+      state.className='ok';state.textContent='Dữ liệu đã kết nối';
+      state.title='Page: '+(data.pages??'-')+' · Tài khoản QC: '+(data.ad_accounts??'-');
     }catch(error){
-      state.className='bad';
-      state.textContent='Dữ liệu chưa kết nối';
+      state.className='bad';state.textContent='Dữ liệu chưa kết nối';
       state.title=error&&error.message?error.message:String(error);
     }finally{checking=false;}
   }
-  state.addEventListener('click',function(){
-    let secret=sessionStorage.getItem('aiguka_admin_secret')||'';
-    if(!secret){
-      secret=prompt('Nhập mã quản trị AIGUKA:')||'';
-      if(secret)sessionStorage.setItem('aiguka_admin_secret',secret);
-    }
-    checkDatabase(true);
-  });
-  setTimeout(()=>checkDatabase(true),900);
+  setTimeout(()=>checkDatabase(true),700);
 })();
 </script>`;
-
-  if (/<\/body>/i.test(html)) {
-    return html.replace(/<\/body>/i, `${injection}</body>`);
-  }
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${injection}</body>`);
   return `${html}${injection}`;
 }
 
@@ -225,12 +224,12 @@ async function fetchAndPreparePage(slug) {
     cache: "no-store",
   });
   const original = await upstream.text();
-  if (!upstream.ok) {
-    return { ok: false, status: upstream.status, original, html: original, errors: [] };
-  }
-  const repaired = repairBrokenInterpolations(original);
-  const errors = validateInlineScripts(repaired);
-  const html = injectRuntimeUi(repaired, errors);
+  if (!upstream.ok) return { ok: false, status: upstream.status, original, html: original, errors: [] };
+  let html = forceSameOrigin(original);
+  html = repairBrokenInterpolations(html);
+  html = injectTestBootstrap(html);
+  const errors = validateInlineScripts(html);
+  html = injectRuntimeUi(html, errors);
   return { ok: true, status: 200, original, html, errors };
 }
 
@@ -238,9 +237,10 @@ app.get("/health", (_req, res) => {
   res.status(200).json({
     ok: true,
     service: "aiguka-v8-railway-admin",
-    version: "1.0.2-full-ui-db-feedback",
+    version: "1.0.3-test-no-browser-key",
     supabase: SUPABASE_URL,
     public_key_configured: Boolean(SUPABASE_PUBLIC_KEY),
+    browser_admin_key_required: false,
     now: new Date().toISOString(),
   });
 });
@@ -267,12 +267,7 @@ app.get("/health/ui", async (_req, res) => {
   res.json({ ok: results.every((x) => x.upstream_ok && (!x.script_errors || x.script_errors.length === 0)), results });
 });
 
-app.get("/__aiguka/db-check", async (req, res) => {
-  const adminSecret = String(req.headers["x-aiguka-admin-secret"] || "");
-  if (!adminSecret) {
-    res.status(401).json({ ok: false, error: "MISSING_ADMIN_SECRET" });
-    return;
-  }
+app.get("/__aiguka/db-check", async (_req, res) => {
   if (!SUPABASE_PUBLIC_KEY) {
     res.status(503).json({ ok: false, error: "MISSING_SUPABASE_PUBLIC_KEY" });
     return;
@@ -283,7 +278,8 @@ app.get("/__aiguka/db-check", async (req, res) => {
       headers: {
         apikey: SUPABASE_PUBLIC_KEY,
         authorization: `Bearer ${SUPABASE_PUBLIC_KEY}`,
-        "x-aiguka-admin-secret": adminSecret,
+        "x-aiguka-railway-test": "enabled",
+        "x-aiguka-admin-secret": TEST_SESSION_VALUE,
       },
       signal: AbortSignal.timeout(20_000),
       cache: "no-store",
@@ -310,10 +306,7 @@ app.get("/__aiguka/db-check", async (req, res) => {
 async function serveSupabasePage(slug, res) {
   const page = await fetchAndPreparePage(slug);
   if (!page.ok) {
-    res
-      .status(page.status)
-      .type("text/plain")
-      .send(`Không tải được giao diện ${slug}: HTTP ${page.status}\n${page.original}`);
+    res.status(page.status).type("text/plain").send(`Không tải được giao diện ${slug}: HTTP ${page.status}\n${page.original}`);
     return;
   }
   res.status(200);
@@ -332,10 +325,7 @@ for (const [path, slug] of pageRoutes.entries()) {
       await serveSupabasePage(slug, res);
     } catch (error) {
       console.error(`[AIGUKA page ${slug}]`, error);
-      res
-        .status(502)
-        .type("text/plain")
-        .send(`Không tải được giao diện AIGUKA: ${error instanceof Error ? error.message : String(error)}`);
+      res.status(502).type("text/plain").send(`Không tải được giao diện AIGUKA: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 }
@@ -347,4 +337,5 @@ app.use((_req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[AIGUKA] Railway admin listening on 0.0.0.0:${PORT}`);
   console.log(`[AIGUKA] Supabase upstream: ${SUPABASE_URL}`);
+  console.log("[AIGUKA] Browser admin key prompt disabled for test mode");
 });
