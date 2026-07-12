@@ -1,0 +1,7 @@
+function graphUrl(path, fields, extra = {}) {
+  const u = new URL("https://graph.facebook.com/" + GRAPH_VERSION + "/" + path);
+  if (fields) u.searchParams.set("fields", fields);
+  for (const [key, value] of Object.entries(extra)) u.searchParams.set(key, String(value));
+  u.searchParams.set("access" + "_" + "token", META_TOKEN);
+  return u.toString();
+}
