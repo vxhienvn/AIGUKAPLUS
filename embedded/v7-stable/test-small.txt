@@ -1,0 +1,10 @@
+async function pages(url, max = 20) {
+  const out = [];
+  let next = url;
+  while (next) {
+    const j = await fetchJson(next);
+    out.push(...(j.data || []));
+    next = j?.paging?.next || "";
+  }
+  return out;
+}
