@@ -19,8 +19,16 @@ else if(!source.includes('installLearningRoutes(app'))source=source.replace('ins
 if(!source.includes('patchLearningUi(html)'))source=source.replace('html = injectTestBootstrap(html);','html = injectTestBootstrap(html);\n  if(slug === "aiguka-v8-learning-ui-v18") html = patchLearningUi(html);');
 if(!source.includes('patchDashboardUi(html)'))source=source.replace('if(slug === "aiguka-v8-learning-ui-v18") html = patchLearningUi(html);','if(slug === "aiguka-v8-learning-ui-v18") html = patchLearningUi(html);\n  if(slug === "aiguka-v8-admin") html = patchDashboardUi(html);');
 
+if(!source.includes('AIGUKA_TWO_ARG_HANDLER_FIX')){
+  source=source.replace(
+    'let html = input;',
+    'let html = input;\n  // AIGUKA_TWO_ARG_HANDLER_FIX\n  html = html.replace(/([A-Za-z_$][\\w$]*)\\(\'\'\\+(.+?)\\+\'\',\'\'\\+(.+?)\\+\'\'\\)/g, (_m,fn,a,b) => `${fn}(\\\\\'\' + ${a} + \'\\\\\',\\\\\'\' + ${b} + \'\\\\\')`);'
+  );
+}
+
 source=source.replace('const url = `${SUPABASE_URL}/functions/v1/aiguka-v8-report-api?action=filters`;','const url = `http://127.0.0.1:${PORT}/functions/v1/aiguka-v8-report-api?action=filters`;');
-source=source.replace('1.0.3-test-no-browser-key','1.0.5-learning-tags');
-source=source.replace('1.0.4-test-rpc-data','1.0.5-learning-tags');
+source=source.replace('1.0.3-test-no-browser-key','1.0.6-control-center-fix');
+source=source.replace('1.0.4-test-rpc-data','1.0.6-control-center-fix');
+source=source.replace('1.0.5-learning-tags','1.0.6-control-center-fix');
 fs.writeFileSync(file,source);
-console.log('[AIGUKA] server-fixed.js patched for reports, learning, source links and tags');
+console.log('[AIGUKA] server-fixed.js patched for all admin surfaces');
