@@ -1,14 +1,14 @@
 {
   "name": "aiguka-v8-railway-admin",
-  "version": "1.0.4",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "AIGUKA V8 online admin gateway for Railway",
+  "description": "AIGUKA V8 core with stable V7 reporting dashboard",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "node patch-server.js && node server-fixed.js"
+    "start": "node materialize-v7-dashboard.js && node patch-server.js && node server-fixed.js"
   },
   "dependencies": {
     "express": "^4.21.2",
