@@ -1,6 +1,6 @@
 {
   "name": "aiguka-v8-railway-admin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "AIGUKA V8 online admin gateway for Railway",
@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server-fixed.js"
   },
   "dependencies": {
     "express": "^4.21.2",
