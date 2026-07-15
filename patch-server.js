@@ -26,6 +26,7 @@ if (!source.includes('from "./reviewed-learning-ui.js"')) {
 
 const routeInstall = `installReportRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 installLearningRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
+app.json = express.json;
 installReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 app.get("/learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 pageRoutes.set("/v8-dashboard","aiguka-v8-admin");
@@ -40,7 +41,7 @@ if (!source.includes("installStableV7Dashboard(app)")) {
 } else if (!source.includes("installReviewedLearning(app")) {
   source = source.replace(
     "installLearningRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});",
-    "installLearningRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});\ninstallReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});\napp.get(\"/learning\",(_req,res)=>res.redirect(302,\"/learning-reviewed\"));",
+    "installLearningRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});\napp.json = express.json;\ninstallReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});\napp.get(\"/learning\",(_req,res)=>res.redirect(302,\"/learning-reviewed\"));",
   );
 }
 
@@ -62,8 +63,8 @@ source = source.replace(
 for (const version of [
   "1.0.3-test-no-browser-key","1.0.4-test-rpc-data","1.0.5-learning-tags",
   "1.0.6-control-center-fix","1.0.7-all-ui-green","1.1.0-v7-dashboard-bridge",
-  "1.1.1-v7-import-pending","1.2.0-v7-stable-dashboard"
-]) source = source.replaceAll(version, "1.2.1-reviewed-learning-restored");
+  "1.1.1-v7-import-pending","1.2.0-v7-stable-dashboard","1.2.1-reviewed-learning-restored"
+]) source = source.replaceAll(version, "1.2.2-reviewed-learning-startup-fix");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] V7 dashboard preserved and reviewed learning restored on /learning");
+console.log("[AIGUKA] Fixed reviewed-learning startup; V7 dashboard and reviewed learning enabled");
