@@ -57,6 +57,8 @@ app.get("/v8-learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/control-center",(_req,res)=>res.redirect(302,"/bot-control"));
 app.get("/v8-control-center",(_req,res)=>res.redirect(302,"/bot-control"));
 pageRoutes.set("/v8-dashboard","aiguka-v8-admin");
+pageRoutes.set("/ai-providers","aiguka-v8-ai-provider-ui");
+pageRoutes.set("/tich-hop-ai","aiguka-v8-ai-provider-ui");
 installStableV7Dashboard(app);`;
 
 if (!source.includes("installStableV7Dashboard(app)")) {
