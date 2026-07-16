@@ -124,10 +124,24 @@ function pancakeBuildCustomerRow(conv) {
     const tagText = tags.join(" ");
     const hasZalo = tags.includes("Zalo") || pancakeDetectZaloFromText(snippet) || pancakeDetectZaloFromText(tagText);
     const product = pancakeClassifyProduct(snippet);
+    const rawType = String(conv.type || conv.conversation_type || "").toLowerCase();
+    const commentId = conv.comment_id || conv.comment?.id || conv.last_comment_id || "";
+    const postId = conv.post_id || conv.post?.id || conv.comment?.post_id || conv.referral?.post_id || "";
+    const isComment = Boolean(commentId) || /comment|bình luận|binh_luan/.test(rawType);
+    const adIds = Array.from(new Set([
+        ...(Array.isArray(conv.ad_ids) ? conv.ad_ids : []),
+        conv.ad_id,
+        conv.ad?.id,
+        conv.referral?.ad_id,
+        conv.referral?.source_ad_id
+    ].filter(Boolean).map(String)));
     return {
         name: conv.from?.name || "Không rõ tên",
         conversation_id: conv.id,
         type: conv.type,
+        source_type: isComment ? "Bình luận" : "Tin nhắn",
+        comment_id: commentId,
+        post_id: postId,
         updated_at: conv.updated_at,
         message_count: conv.message_count || 0,
         has_phone: Boolean(conv.has_phone || phones.length),
@@ -137,8 +151,8 @@ function pancakeBuildCustomerRow(conv) {
         hot_lead: pancakeIsHotLead(conv),
         tags: Array.from(new Set([...tags, ...(hasZalo ? ["Zalo"] : []), ...(phones.length ? ["Có SĐT"] : [])])),
         snippet,
-        ad_ids: conv.ad_ids || [],
-        ad_name: conv.ad_name || conv.ad?.name || conv.ad_title || "",
+        ad_ids: adIds,
+        ad_name: conv.ad_name || conv.ad?.name || conv.ad_title || conv.referral?.ad_name || "",
         ad_account_id: conv.ad_account_id || conv.account_id || conv.ad?.account_id || "",
         ad_account_name: conv.ad_account_name || conv.account_name || conv.ad?.account_name || ""
     };
