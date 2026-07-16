@@ -55,7 +55,10 @@ function validState(value) {
       .createHmac("sha256", META_APP_SECRET)
       .update(payload)
       .digest("base64url");
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return false;
+    const actualBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+    if (actualBuffer.length !== expectedBuffer.length) return false;
+    if (!crypto.timingSafeEqual(actualBuffer, expectedBuffer)) return false;
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     return Number(data.exp) > Date.now();
   } catch {
@@ -74,7 +77,7 @@ function cookieValue(req, name) {
 
 async function fetchJson(url) {
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(25_000),
     cache: "no-store",
   });
   const text = await response.text();
@@ -89,8 +92,8 @@ async function fetchJson(url) {
 async function fetchPages(url, maxPages = 20) {
   const rows = [];
   let next = url;
-  let page = 0;
-  while (next && page++ < maxPages) {
+  let pageNumber = 0;
+  while (next && pageNumber++ < maxPages) {
     const data = await fetchJson(next);
     rows.push(...(data.data || []));
     next = data?.paging?.next || "";
@@ -101,6 +104,22 @@ async function fetchPages(url, maxPages = 20) {
 function page(title, body) {
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>
   *{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#172033;font:15px Arial,sans-serif}.top{background:#0f172a;color:#fff;padding:20px}.wrap{max-width:920px;margin:24px auto;padding:0 14px}.card{background:#fff;border:1px solid #d7dfeb;border-radius:14px;padding:18px;margin-bottom:14px}.btn{display:inline-block;padding:12px 16px;border-radius:9px;background:#1877f2;color:#fff;text-decoration:none;font-weight:700}.muted{color:#667085}.good{background:#ecfdf3;border-color:#abefc6}.bad{background:#fff1f0;border-color:#fecdca}.code{font-family:monospace;background:#f2f4f7;padding:9px;border-radius:7px;word-break:break-all}.row{padding:10px 0;border-bottom:1px solid #eaecf0}.row:last-child{border-bottom:0}</style></head><body><div class="top"><h2 style="margin:0">AIGUKA — Kết nối Facebook</h2></div><div class="wrap">${body}</div></body></html>`;
+}
+
+function successPage(profileName, accountCount) {
+  return page("Đã kết nối", `<div class="card good"><h2>Đã kết nối ${esc(profileName)}</h2><p>AIGUKA nhìn thấy <b>${accountCount}</b> tài khoản quảng cáo.</p><p id="apply-state">Đang làm mới dữ liệu Meta và chuyển về Dashboard…</p></div><script>
+  (async function(){
+    const status=document.getElementById('apply-state');
+    try{
+      const response=await fetch('/api/v7-dashboard/status?oauth_refresh='+Date.now(),{cache:'no-store'});
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      status.textContent='Đã áp dụng kết nối. Đang mở Dashboard…';
+    }catch(error){
+      status.textContent='Đã lưu kết nối. Dashboard sẽ tự làm mới dữ liệu Meta.';
+    }
+    setTimeout(function(){location.replace('/dashboard?facebook_connected=1');},900);
+  })();
+  </script>`);
 }
 
 export function installMetaFacebookLogin(app) {
@@ -181,18 +200,14 @@ export function installMetaFacebookLogin(app) {
       }
 
       const token = encodeURIComponent(accessToken);
-      const profile = await fetchJson(
-        `https://graph.facebook.com/${GRAPH_VERSION}/me?fields=id,name&access_token=${token}`,
-      );
-      const permissions = await fetchPages(
-        `https://graph.facebook.com/${GRAPH_VERSION}/me/permissions?limit=200&access_token=${token}`,
-      );
+      const [profile, permissions, adAccounts] = await Promise.all([
+        fetchJson(`https://graph.facebook.com/${GRAPH_VERSION}/me?fields=id,name&access_token=${token}`),
+        fetchPages(`https://graph.facebook.com/${GRAPH_VERSION}/me/permissions?limit=200&access_token=${token}`),
+        fetchPages(`https://graph.facebook.com/${GRAPH_VERSION}/me/adaccounts?fields=id,name,account_status&limit=200&access_token=${token}`),
+      ]);
       const scopes = permissions
         .filter((item) => item.status === "granted")
         .map((item) => item.permission);
-      const adAccounts = await fetchPages(
-        `https://graph.facebook.com/${GRAPH_VERSION}/me/adaccounts?fields=id,name,account_status&limit=200&access_token=${token}`,
-      );
 
       await saveMetaConnection({
         facebookUserId: profile.id,
@@ -204,8 +219,7 @@ export function installMetaFacebookLogin(app) {
       process.env.META_ACCESS_TOKEN = accessToken;
 
       res.setHeader("set-cookie", "aiguka_fb_state=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax");
-      res.type("html").send(page("Đã kết nối", `<div class="card good"><h2>Đã kết nối ${esc(profile.name)}</h2><p>AIGUKA nhìn thấy <b>${adAccounts.length}</b> tài khoản quảng cáo từ lần đăng nhập này.</p><p>Máy chủ sẽ tự khởi động lại để áp dụng token mới.</p></div>`));
-      setTimeout(() => process.exit(0), 1800).unref();
+      res.status(200).type("html").send(successPage(profile.name, adAccounts.length));
     } catch (error) {
       console.error("[AIGUKA Meta OAuth]", error);
       res.status(400).type("html").send(page("Kết nối thất bại", `<div class="card bad"><b>Không thể kết nối Facebook</b><p>${esc(error.message)}</p></div><a href="/facebook-connect">Thử lại</a>`));
