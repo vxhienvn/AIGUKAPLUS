@@ -16,5 +16,6 @@ try {
 }
 
 await import("./materialize-v7-dashboard.js");
+await import("./patch-v7-lead-filters.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
