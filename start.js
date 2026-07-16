@@ -22,6 +22,7 @@ await import("./patch-v7-product-detection.js");
 await import("./patch-v7-navigation.js");
 await import("./patch-v7-lead-filters.js");
 await import("./patch-v7-daily-grouped.js");
+await import("./patch-v7-daily-layout-sample.js");
 await import("./patch-learning-client.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
