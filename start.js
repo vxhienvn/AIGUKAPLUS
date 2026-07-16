@@ -15,6 +15,7 @@ try {
   console.error("[AIGUKA] Could not load saved Meta OAuth connection:", error.message);
 }
 
+await import("./patch-v7-pancake-classifier.js");
 await import("./materialize-v7-dashboard.js");
 await import("./patch-v7-product-detection.js");
 await import("./patch-v7-lead-filters.js");
