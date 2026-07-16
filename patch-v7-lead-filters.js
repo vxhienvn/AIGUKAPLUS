@@ -165,6 +165,7 @@ function updateLeadHeaderCounts(table){
   contactBadge.textContent=String(contactCount);
 }
 function updateVisibleDashboardStats(table){
+  if(table.classList.contains('daily-report-table'))return;
   const headers=[...table.querySelectorAll('thead th')].map(th=>clean(th.childNodes[0]?.textContent||th.textContent));
   const spendIndex=headers.findIndex(x=>/^Chi tiêu$/i.test(x)),messageIndex=headers.findIndex(x=>/^Tin nhắn( Meta)?$/i.test(x)),pancakeIndex=headers.findIndex(x=>/^Hội thoại Pancake$/i.test(x)),contactIndex=headers.findIndex(x=>/^(Liên hệ|SĐT\/Zalo)$/i.test(x)),accountIndex=headers.findIndex(x=>/^(Tài khoản|Tài khoản QC)$/i.test(x));
   if(spendIndex<0||messageIndex<0)return;
