@@ -37,9 +37,12 @@ function openFilter(table,th,col,button){
   const state=stateOf(table);
   const header=clean(th.childNodes[0]?.textContent||th.textContent);
   const contactMode=header.toLowerCase().replaceAll(' ','').includes('sđt/zalo');
-  const rows=[...(table.tBodies[0]?.rows||[])].filter(r=>r.cells.length>col);
-  const rawValues=rows.map(r=>clean(r.cells[col].innerText));
-  const values=contactMode
+  const staffMode=/^nhân viên$/i.test(header);
+  const accountMode=/^(tài khoản|tài khoản qc)$/i.test(header);
+  const rows=[...(table.tBodies[0]?.rows||[])].filter(r=>r.classList.contains('daily-account-row')||r.cells.length>col);
+  const rawValues=rows.map(r=>accountMode&&r.dataset.account?clean(r.dataset.account):clean(r.cells[col]?.innerText));
+  const staffValues=[...new Set(rows.flatMap(r=>[...r.querySelectorAll('[data-staff-name]')].map(x=>clean(x.dataset.staffName))))];
+  const values=staffMode?staffValues.sort((a,b)=>a.localeCompare(b,'vi')):contactMode
     ? ["Có SĐT/Zalo","Không có"]
     : [...new Set(rawValues)].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   const currentActual=state.filters.get(col);
@@ -107,6 +110,8 @@ function openFilter(table,th,col,button){
     const chosen=new Set(boxes.filter(item=>item.box.checked).map(item=>item.value));
     if(chosen.size===values.length){
       state.filters.delete(col);
+    }else if(staffMode){
+      state.filters.set(col,chosen);
     }else if(contactMode){
       state.filters.set(col,new Set(rawValues.filter(value=>chosen.has(contactCategory(value)))));
     }else{
@@ -123,11 +128,15 @@ function openFilter(table,th,col,button){
 source = source.slice(0, openStart) + smartOpenFilter + source.slice(setupStart);
 
 const oldSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột như Excel';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
-const newSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const header=clean(th.textContent);if(header==='#'||/^Khách hàng$/i.test(header)||/^Tên khách hàng$/i.test(header))return;const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
+const newSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const header=clean(th.textContent);const allowed=/^(Ngày|Tài khoản QC|Tài khoản|Thẻ \/ Phương thức|Quảng cáo|Campaign \/ Ad set|Sản phẩm|Tag Pancake|Nguồn khách|Nhân viên)$/i;if(!allowed.test(header))return;const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
 if (!source.includes(oldSetup)) {
   throw new Error("V7_FILTER_SETUP_ANCHOR_NOT_FOUND");
 }
 source = source.replace(oldSetup, newSetup);
+source = source.replace(
+  "if(row.cells.length<=col||!selected.has(clean(row.cells[col].innerText))){show=false;break}",
+  "const header=clean(table.querySelectorAll('thead th')[col]?.childNodes[0]?.textContent||table.querySelectorAll('thead th')[col]?.textContent);let matches=false;if(/^nhân viên$/i.test(header)){matches=[...row.querySelectorAll('[data-staff-name]')].some(x=>selected.has(clean(x.dataset.staffName)))}else if(/^(tài khoản|tài khoản qc)$/i.test(header)&&row.dataset.account){matches=selected.has(clean(row.dataset.account))}else{matches=row.cells.length>col&&selected.has(clean(row.cells[col].innerText))}if(!matches){show=false;break}"
+);
 
 const leadCounterCss = String.raw`.lead-head-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:21px;margin-left:7px;padding:0 8px;border-radius:999px;color:#fff;font:700 11px Arial,sans-serif;vertical-align:middle;box-shadow:0 1px 2px #0002}.lead-head-count.messages{background:#155eef}.lead-head-count.customers{background:#475467}.lead-head-count.contacts{background:#067647}`;
 source = source.replace("</style>", leadCounterCss + "</style>");
