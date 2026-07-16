@@ -67,7 +67,7 @@ export function installBotControlUi(app, options) {
         is_open: body.is_open !== false, holiday_mode: !!body.holiday_mode, staff_online_count: Number(body.staff_online_count || 0),
         admin_pause_minutes: Number(body.admin_pause_minutes || 10), customer_wait_minutes: Number(body.customer_wait_minutes || 5),
         working_wait_minutes: Number(body.working_wait_minutes || 5), outside_wait_minutes: Number(body.outside_wait_minutes || 5), bot_mode: body.bot_mode || "scheduled",
-        support_wait_minutes: Number(body.support_wait_minutes || body.working_wait_minutes || 5), followup_wait_hours: Number(body.followup_wait_hours || 8),
+        support_wait_minutes: Number(body.support_wait_minutes || body.working_wait_minutes || 5),
         reply_windows: Array.isArray(body.reply_windows) ? body.reply_windows : [],
         working_windows: Array.isArray(body.working_windows) ? body.working_windows : [],
         after_hours_windows: Array.isArray(body.after_hours_windows) ? body.after_hours_windows : [], updated_at: new Date().toISOString(),
