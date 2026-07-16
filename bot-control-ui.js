@@ -45,6 +45,7 @@ export function installBotControlUi(app, options) {
         mode: String(body.mode || "OBSERVE").toUpperCase(), queue_first: body.queue_first !== false,
         aiguka_can_send_text: !!body.aiguka_can_send_text, aiguka_can_send_image: !!body.aiguka_can_send_image,
         aiguka_can_auto_reply: !!body.aiguka_can_auto_reply, aiguka_can_create_sale_task: body.aiguka_can_create_sale_task !== false,
+        operational_mode: body.operational_mode || null, support_slide_only: !!body.support_slide_only,
         meta_is_source_of_truth: true, aiguka_can_queue_internal: true,
       };
       const rows = await rest("v8_config_hub?key=eq.runtime_mode&scope=eq.global&is_active=eq.true", { method: "PATCH", body: { value, updated_at: new Date().toISOString() } });
@@ -65,7 +66,7 @@ export function installBotControlUi(app, options) {
         timezone: body.timezone || "Asia/Ho_Chi_Minh", work_start: body.work_start || "08:00", work_end: body.work_end || "22:00",
         is_open: body.is_open !== false, holiday_mode: !!body.holiday_mode, staff_online_count: Number(body.staff_online_count || 0),
         admin_pause_minutes: Number(body.admin_pause_minutes || 10), customer_wait_minutes: Number(body.customer_wait_minutes || 5),
-        working_wait_minutes: Number(body.working_wait_minutes || 5), outside_wait_minutes: Number(body.outside_wait_minutes || 5),
+        working_wait_minutes: Number(body.working_wait_minutes || 5), outside_wait_minutes: Number(body.outside_wait_minutes || 5), bot_mode: body.bot_mode || "scheduled",
         reply_windows: Array.isArray(body.reply_windows) ? body.reply_windows : [],
         working_windows: Array.isArray(body.working_windows) ? body.working_windows : [],
         after_hours_windows: Array.isArray(body.after_hours_windows) ? body.after_hours_windows : [], updated_at: new Date().toISOString(),
