@@ -8,7 +8,7 @@ const fn=`async function dailyPage(req,res) {
   const p=period(req.query,'dashboard'),selected=String(req.query.account||'all')==='all'?'all':act(req.query.account);
   const [accounts,data,pancake,ads]=await Promise.all([getAccounts(),fetchDaily(p.since,p.until,selected),fetchPancake(500),fetchAds(p.since,p.until,selected)]);
   let leads=mapLeads(pancake.rows,ads.rows,p.since,p.until);if(selected!=='all')leads=leads.filter(x=>act(x.accountId)===selected);
-  const ignored=new Set(["zalo","có sđt","đã gọi","đã quét","đã quet","tân","knm","chưa rõ sản phẩm"]);
+  const ignored=new Set(["zalo","có sđt","đã gọi","đã quét","đã quet" ,"knm","chưa rõ sản phẩm"]);
   const staffByKey=new Map();
   for(const lead of leads){
     const date=dateKey(lead.last_customer_message_at||lead.updated_at),account=act(lead.accountId||"");
