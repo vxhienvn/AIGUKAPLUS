@@ -1,5 +1,6 @@
 const cleanUrl=v=>String(v||"").replace(/\/$/,"");
 export function installIntegrationToggleRoutes(app){
+  app.use((req,res,next)=>{if(req.headers["content-type"]?.includes("application/json")){let raw="";req.on("data",d=>raw+=d);req.on("end",()=>{try{req.body=raw?JSON.parse(raw):{};next()}catch{res.status(400).json({ok:false,error:"JSON_KHONG_HOP_LE"})}})}else next()});
   const url=cleanUrl(process.env.SUPABASE_URL);
   const key=process.env.SUPABASE_SERVICE_ROLE_KEY||"";
   const headers={apikey:key,authorization:"Bearer "+key,"content-type":"application/json"};
