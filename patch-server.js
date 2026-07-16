@@ -80,8 +80,8 @@ for (const version of [
   "1.0.3-test-no-browser-key","1.0.4-test-rpc-data","1.0.5-learning-tags",
   "1.0.6-control-center-fix","1.0.7-all-ui-green","1.1.0-v7-dashboard-bridge",
   "1.1.1-v7-import-pending","1.2.0-v7-stable-dashboard","1.2.1-reviewed-learning-restored",
-  "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login"
-]) source = source.replaceAll(version, "1.3.1-facebook-callback-fixed");
+  "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed"
+]) source = source.replaceAll(version, "1.3.2-v7-all-account-filter-fixed");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Facebook callback fixed; active Meta token applies without server restart");
+console.log("[AIGUKA] V7 all-account filter fixed for dashboard, daily report and export");
