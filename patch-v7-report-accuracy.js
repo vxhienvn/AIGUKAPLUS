@@ -32,4 +32,4 @@ source=source.replace(
 source=source.replace('colspan="10">Không có khách phù hợp.', 'colspan="11">Không có khách phù hợp.');
 
 fs.writeFileSync(file,source,"utf8");
-console.log("[AIGUKA] Meta accounts fetched concurrently with per-account timezone and lead source labels");
+console.log("[AIGUKA] Meta reports concurrent; each account uses its own Meta timezone; message and customer counters separated");
