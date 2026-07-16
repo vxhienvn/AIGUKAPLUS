@@ -13,11 +13,10 @@ export async function fetchMetaBusinessRows(limit=2000){
       const pt=page.access_token||token;
       const fields="id,updated_time,participants,messages.limit(100){id,message,from,created_time,attachments}";
       const url="https://graph.facebook.com/"+VERSION+"/"+encodeURIComponent(page.id)+"/conversations?fields="+encodeURIComponent(fields)+"&limit=100&access_token="+encodeURIComponent(pt);
-      const conversations=await pages(url,10),rows=[];
+      const conversations=await pages(url,3),rows=[];
       for(const conv of conversations){
         const customer=(conv.participants?.data||[]).find(x=>String(x.id)!==String(page.id))||{};
-        let messages=[...(conv.messages?.data||[])],next=conv.messages?.paging?.next||"",n=0;
-        while(next&&n++<5&&messages.length<500){const part=await json(next);messages.push(...(part.data||[]));next=part.paging?.next||""}
+        const messages=[...(conv.messages?.data||[])];
         for(const m of messages){
           if(String(m.from?.id||"")===String(page.id))continue;
           rows.push({name:m.from?.name||customer.name||"Không rõ tên",customer_id:String(m.from?.id||customer.id||""),conversation_id:String(conv.id||"")+":"+String(m.id||""),meta_conversation_id:String(conv.id||""),meta_message_id:String(m.id||""),page_id:String(page.id),page_name:page.name||"",updated_at:m.created_time,last_customer_message_at:m.created_time,last_message_is_customer:true,source_type:"Tin nhắn",snippet:String(m.message||"")||((m.attachments?.data||[]).length?"[Tệp đính kèm]":""),phones:[],tags:[],ad_ids:[],message_count:1,from_meta_business:true,date_verified:true});
