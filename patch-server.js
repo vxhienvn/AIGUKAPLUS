@@ -81,8 +81,8 @@ for (const version of [
   "1.0.6-control-center-fix","1.0.7-all-ui-green","1.1.0-v7-dashboard-bridge",
   "1.1.1-v7-import-pending","1.2.0-v7-stable-dashboard","1.2.1-reviewed-learning-restored",
   "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed",
-  "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters"
-]) source = source.replaceAll(version, "1.3.4-practical-lead-filters");
+  "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters","1.3.4-practical-lead-filters"
+]) source = source.replaceAll(version, "1.3.5-filter-card-fixed");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Practical lead filters enabled: no STT/name filter; contact status only");
+console.log("[AIGUKA] Filter dropdown runtime restored and verified card 0177 mapped");
