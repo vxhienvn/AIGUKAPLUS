@@ -3,7 +3,7 @@ const file="v7-dashboard-stable.js";
 let source=fs.readFileSync(file,"utf8");
 
 source=source.replaceAll("fields=id,name,account_status&limit=", "fields=id,name,account_status,timezone_name,timezone_offset_hours_utc&limit=");
-source=source.replaceAll("&limit=500&access_token=${token}", "&use_account_attribution_setting=true&action_report_time=conversion&limit=500&access_token=${token}");
+source=source.replaceAll("&limit=500&access_token=${token}", "&action_attribution_windows=%5B%227d_click%22%5D&action_report_time=conversion&limit=500&access_token=${token}");
 source=source.replace(
   'map.set(id, { ...old, id, name: old.name && old.name !== id ? old.name : (x.name || x.account_name || id), status: x.account_status || x.status || old.status || "", source: old.source ? `${old.source}+${source}` : source });',
   'map.set(id, { ...old, id, name: old.name && old.name !== id ? old.name : (x.name || x.account_name || id), status: x.account_status || x.status || old.status || "", timezoneName: x.timezone_name || old.timezoneName || "Không xác định", timezoneOffset: x.timezone_offset_hours_utc ?? old.timezoneOffset ?? null, source: old.source ? `${old.source}+${source}` : source });'
