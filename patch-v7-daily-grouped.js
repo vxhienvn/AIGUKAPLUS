@@ -8,7 +8,7 @@ const fn=`async function dailyPage(req,res) {
   const p=period(req.query,'dashboard'),selected=String(req.query.account||'all')==='all'?'all':act(req.query.account);
   const [accounts,data,pancake,ads]=await Promise.all([getAccounts(),fetchDaily(p.since,p.until,selected),fetchPancake(500),fetchAds(p.since,p.until,selected)]);
   let leads=mapLeads(pancake.rows,ads.rows,p.since,p.until);if(selected!=='all')leads=leads.filter(x=>act(x.accountId)===selected);
-  const ignored=new Set(["zalo","có sđt","đã gọi","đã quét","đã quet" ,"knm","chưa rõ sản phẩm"]);
+  const ignored=new Set(["zalo","có sđt","đã gọi","đã quét","đã quet","knm","chưa rõ sản phẩm","hẹn ra ch","hẹn ra cửa hàng","hen ra ch","hen ra cua hang","k mua","không mua"]);
   const staffByKey=new Map();
   for(const lead of leads){
     const date=dateKey(lead.last_customer_message_at||lead.updated_at),account=act(lead.accountId||"");
@@ -17,13 +17,13 @@ const fn=`async function dailyPage(req,res) {
       const key=date+"|"+account+"|"+name;const x=staffByKey.get(key)||{name,messages:0,phones:0};x.messages+=1;if(lead.has_phone||lead.has_zalo)x.phones+=1;staffByKey.set(key,x);
     }
   }
-  const staffHtml=(date,account)=>[...staffByKey.entries()].filter(([k])=>k.startsWith(date+"|"+act(account)+"|")).map(([,x])=>\`<span class="staff-stat"><b>\${esc(x.name)}</b>: \${x.messages} tin · \${x.phones} số</span>\`).join("<br>")||'<span class="muted">Chưa xác định</span>';
+  const staffHtml=(date,account)=>[...staffByKey.entries()].filter(([k])=>k.startsWith(date+"|"+act(account)+"|")).map(([,x])=>\`<span class="staff-stat" data-staff-name="\${esc(x.name)}"><b>\${esc(x.name)}</b>: \${x.messages} tin · \${x.phones} số</span>\`).join("<br>")||'<span class="muted">Chưa xác định</span>';
   const byDate=new Map();for(const row of data.rows){if(!byDate.has(row.date))byDate.set(row.date,[]);byDate.get(row.date).push(row)}
   let dayNo=0;const rows=[...byDate.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([date,items])=>{
     dayNo++;const spend=items.reduce((s,x)=>s+Number(x.spend||0),0),messages=items.reduce((s,x)=>s+Number(x.messages||0),0);
     const allStaff=items.map(x=>staffHtml(date,x.accountId)).filter(x=>!x.includes("Chưa xác định")).join("<br>")||'<span class="muted">Chưa xác định</span>';
     const total=\`<tr class="daily-total-row" data-date="\${date}"><td><b>\${dayNo}</b></td><td><b>\${date}</b></td><td><b>TỔNG NGÀY</b></td><td></td><td data-spend="\${spend}"><b class="daily-total-money">\${money(spend)}</b></td><td data-messages="\${messages}"><b>\${messages}</b></td><td>\${allStaff}</td></tr>\`;
-    const children=items.sort((a,b)=>String(a.accountName).localeCompare(String(b.accountName),"vi")).map(x=>\`<tr class="daily-account-row" data-date="\${date}"><td></td><td>\${date}</td><td>\${esc(x.accountName)}</td><td>\${esc(x.paymentMethod||(x.cardLast4?'Thẻ •••• '+x.cardLast4:'Trả trước / chưa đọc được thẻ'))}</td><td data-spend="\${Number(x.spend||0)}">\${money(x.spend)}</td><td data-messages="\${Number(x.messages||0)}">\${x.messages}</td><td>\${staffHtml(date,x.accountId)}</td></tr>\`).join("");
+    const children=items.sort((a,b)=>String(a.accountName).localeCompare(String(b.accountName),"vi")).map(x=>\`<tr class="daily-account-row" data-date="\${date}"><td></td><td>\${date}</td><td>\${esc(x.accountName)}</td><td>\${esc(x.paymentMethod||(x.cardLast4?'Thẻ •••• '+x.cardLast4:'Trả trước / chưa đọc được thẻ'))}</td><td data-spend="\${Number(x.spend||0)}">\${money(x.spend)}</td><td data-messages="\${Number(x.messages||0)}">\${x.messages}</td><td class="staff-cell"><div class="staff-content">\${staffHtml(date,x.accountId)}</div><button type="button" class="staff-expand">Xem thêm</button></td></tr>\`).join("");
     return total+children;
   }).join("");
   const visibleAccounts=new Set(data.rows.map(x=>x.accountId)).size;
