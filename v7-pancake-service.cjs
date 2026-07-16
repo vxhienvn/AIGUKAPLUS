@@ -137,12 +137,16 @@ function pancakeBuildCustomerRow(conv) {
     ].filter(Boolean).map(String)));
     return {
         name: conv.from?.name || "Không rõ tên",
+        customer_id: conv.from?.id || conv.customer_id || conv.sender_id || "",
         conversation_id: conv.id,
         type: conv.type,
         source_type: isComment ? "Bình luận" : "Tin nhắn",
         comment_id: commentId,
         post_id: postId,
         updated_at: conv.updated_at,
+        last_customer_message_at: conv.last_customer_message_at || conv.last_message?.created_time || conv.last_message?.created_at || "",
+        last_message_from_id: conv.last_message?.from?.id || conv.last_message?.sender_id || "",
+        last_message_is_customer: conv.last_message?.from?.id ? String(conv.last_message.from.id) !== String(PANCAKE_PAGE_ID) : null,
         message_count: conv.message_count || 0,
         has_phone: Boolean(conv.has_phone || phones.length),
         has_zalo: hasZalo,
