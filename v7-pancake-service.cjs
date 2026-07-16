@@ -1,5 +1,27 @@
 const PANCAKE_PAGE_ID = process.env.PANCAKE_PAGE_ID || process.env.META_PAGE_ID || process.env.PAGE_ID || "";
 const PANCAKE_PAGE_ACCESS_TOKEN = process.env.PANCAKE_PAGE_ACCESS_TOKEN || "";
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+let pancakeCache = { rows: [], time: 0 };
+let integrationCache = { value: null, time: 0 };
+
+async function pancakeRuntime() {
+    if (integrationCache.value && Date.now() - integrationCache.time < 30000) return integrationCache.value;
+    let value = { connection_enabled: true, message_sync_enabled: true };
+    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+            const response = await fetch(SUPABASE_URL + "/rest/v1/v8_integration_runtime?integration_key=eq.pancake&select=connection_enabled,message_sync_enabled,status&limit=1", {
+                headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: "Bearer " + SUPABASE_SERVICE_ROLE_KEY },
+                signal: AbortSignal.timeout(10000),
+                cache: "no-store"
+            });
+            const rows = await response.json();
+            if (response.ok && Array.isArray(rows) && rows[0]) value = rows[0];
+        } catch {}
+    }
+    integrationCache = { value, time: Date.now() };
+    return value;
+}
 
 function pancakeCleanHtml(html = "") {
     return String(html)
@@ -123,8 +145,10 @@ function pancakeBuildCustomerRow(conv) {
 }
 
 async function pancakeFetchConversations(limit) {
+    const runtime = await pancakeRuntime();
+    if (runtime.connection_enabled === false) return [];
     if (!PANCAKE_PAGE_ID || !PANCAKE_PAGE_ACCESS_TOKEN) {
-        throw new Error("Thiếu PANCAKE_PAGE_ID hoặc PANCAKE_PAGE_ACCESS_TOKEN");
+        return pancakeCache.rows;
     }
     const targetLimit = Math.min(Math.max(Number(limit) || 300, 1), 500);
     const allConversations = [];
@@ -135,9 +159,15 @@ async function pancakeFetchConversations(limit) {
         safetyCounter++;
         let url = `https://pages.fm/api/public_api/v2/pages/${PANCAKE_PAGE_ID}/conversations?page_access_token=${encodeURIComponent(PANCAKE_PAGE_ACCESS_TOKEN)}`;
         if (lastConversationId) url += `&last_conversation_id=${encodeURIComponent(lastConversationId)}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!data.success) throw new Error(`Pancake API lỗi: ${JSON.stringify(data)}`);
+        const response = await fetch(url, { signal: AbortSignal.timeout(30000), cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 429 || data?.error_code === 429) {
+            return pancakeCache.rows;
+        }
+        if (!response.ok || !data.success) {
+            if (pancakeCache.rows.length) return pancakeCache.rows;
+            return [];
+        }
         const batch = Array.isArray(data.conversations) ? data.conversations : [];
         if (batch.length === 0) break;
         for (const conv of batch) {
@@ -151,7 +181,9 @@ async function pancakeFetchConversations(limit) {
         lastConversationId = lastItem.id;
         if (batch.length < 60) break;
     }
-    return allConversations.slice(0, targetLimit);
+    const rows = allConversations.slice(0, targetLimit);
+    if (rows.length) pancakeCache = { rows, time: Date.now() };
+    return rows;
 }
 
 function pancakeVietnamDateString(date = new Date()) {
