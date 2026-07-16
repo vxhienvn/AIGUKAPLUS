@@ -37,18 +37,26 @@ if (!response.ok || !payload?.ok || !Array.isArray(payload?.chunks)) {
   );
 }
 
-const source = Buffer.from(payload.chunks.join(""), "base64");
-const md5 = crypto.createHash("md5").update(source).digest("hex");
+const sourceBuffer = Buffer.from(payload.chunks.join(""), "base64");
+const md5 = crypto.createHash("md5").update(sourceBuffer).digest("hex");
 const expectedBytes = 23_115;
 const expectedMd5 = "971b141fedd159796a7d57a1467aaf69";
 
-if (source.length !== expectedBytes || md5 !== expectedMd5) {
+if (sourceBuffer.length !== expectedBytes || md5 !== expectedMd5) {
   throw new Error(
-    `V7_CODE_INTEGRITY_ERROR bytes=${source.length} md5=${md5}`,
+    `V7_CODE_INTEGRITY_ERROR bytes=${sourceBuffer.length} md5=${md5}`,
   );
 }
 
-fs.writeFileSync("v7-dashboard-stable.js", source);
+let source = sourceBuffer.toString("utf8");
+if (!source.includes("/facebook-connect")) {
+  source = source.replace(
+    '<hr style="border-color:#334155">',
+    '${nav(\'/facebook-connect\',\'🔐 Kết nối Facebook\',\'facebook\')}<hr style="border-color:#334155">',
+  );
+}
+
+fs.writeFileSync("v7-dashboard-stable.js", source, "utf8");
 console.log(
-  `[AIGUKA] Stable V7 dashboard materialized: ${source.length} bytes · ${md5}`,
+  `[AIGUKA] Stable V7 dashboard materialized: ${sourceBuffer.length} bytes · ${md5} · Facebook connection menu added`,
 );
