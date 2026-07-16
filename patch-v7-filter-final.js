@@ -4,8 +4,8 @@ let source=fs.readFileSync(file,"utf8");
 const script=String.raw`<script id="filter-final-sync">(function(){
 const allowed=new Set(["ngày","tài khoản qc","tài khoản","thẻ / phương thức","quảng cáo","campaign / ad set","chiến dịch / nhóm quảng cáo","khách hàng","sđt/zalo","sđt / zalo","sản phẩm","tag pancake","nguồn khách","loại tương tác","nhân viên","trạng thái"]);
 const states=new WeakMap();let menu=null;
-function title(th){const c=th.cloneNode(true);c.querySelectorAll("button").forEach(x=>x.remove());return String(c.textContent||"").split("\n").join(" ").trim().toLowerCase()}
-function value(v){return String(v||"").split("\n").join(" ").trim()||"(Trống)"}
+function title(th){const c=th.cloneNode(true);c.querySelectorAll("button").forEach(x=>x.remove());return String(c.textContent||"").split(String.fromCharCode(10)).join(" ").trim().toLowerCase()}
+function value(v){return String(v||"").split(String.fromCharCode(10)).join(" ").trim()||"(Trống)"}
 function state(table){if(!states.has(table))states.set(table,new Map());return states.get(table)}
 function close(){if(menu){menu.remove();menu=null}}
 function number(v){let s="";for(const ch of String(v||""))if(ch>="0"&&ch<="9"||ch==="-")s+=ch;return Number(s)||0}
