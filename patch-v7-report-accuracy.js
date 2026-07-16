@@ -52,12 +52,31 @@ const newMapLeads=`function mapLeads(pancakeRows, adsRows, since, until) {
     if(ad&&x.customer_id)knownByCustomer.set(String(x.customer_id),ad);
     if(ad&&x.name)knownByName.set(String(x.name).trim().toLowerCase(),ad);
   }
-  const seen=new Set();
-  return candidates.map(x => {
+  const enriched=candidates.map(x => {
     const ids=(x.ad_ids||[]).map(String),post=String(x.post_id||"");
     const ad=ids.map(id=>byAd.get(id)).find(Boolean)||byPost.get(post)||byPost.get(post.split("_").pop())||knownByCustomer.get(String(x.customer_id||""))||knownByName.get(String(x.name||"").trim().toLowerCase());
-    return { ...x, accountId: ad?.accountId || x.ad_account_id || "", accountName: ad?.accountName || x.ad_account_name || "", adId: ad?.adId || ids[0] || "", adName: ad?.adName || x.ad_name || "", campaignName: ad?.campaignName || "", adsetName: ad?.adsetName || "", attributionMethod: ids.length?"ad_id":(post&&ad?"post_id":(ad?"khách_quay_lại":"chưa_xác_định")) };
-  }).filter(x=>{const key=String(x.customer_id||x.conversation_id||"");if(!key||seen.has(key))return !key;seen.add(key);return true});
+    return { ...x, accountId: ad?.accountId || x.ad_account_id || "", accountName: ad?.accountName || x.ad_account_name || "", adId: ad?.adId || ids[0] || "", adName: ad?.adName || x.ad_name || "", campaignName: ad?.campaignName || "", adsetName: ad?.adsetName || "", attributionMethod: ids.length?"ad_id":(post&&ad?"post_id":(ad?"khách_quay_lại":"khách_vãng_lai")), dateVerified:Boolean(x.last_customer_message_at) };
+  });
+  const grouped=new Map();
+  for(const x of enriched){
+    const customerKey=String(x.customer_id||"").trim()||String(x.name||"").trim().toLowerCase();
+    const adKey=String(x.adId||"").trim()||"VANG_LAI";
+    const key=customerKey+"|"+adKey;
+    const old=grouped.get(key);
+    if(!old){grouped.set(key,{...x,customerKey,sourceTypes:new Set([x.source_type||"Tin nhắn"]),conversationIds:[x.conversation_id].filter(Boolean)});continue}
+    old.sourceTypes.add(x.source_type||"Tin nhắn");
+    old.source_type=[...old.sourceTypes].sort((a,b)=>a==="Bình luận"?-1:1).join(" + ");
+    old.tags=[...new Set([...(old.tags||[]),...(x.tags||[])])];
+    old.phones=[...new Set([...(old.phones||[]),...(x.phones||[])])];
+    old.has_phone=old.has_phone||x.has_phone;old.has_zalo=old.has_zalo||x.has_zalo;
+    old.conversationIds.push(x.conversation_id);
+    if(new Date(x.last_customer_message_at||x.updated_at)>new Date(old.last_customer_message_at||old.updated_at)){old.snippet=x.snippet;old.updated_at=x.updated_at;old.last_customer_message_at=x.last_customer_message_at}
+    old.dateVerified=old.dateVerified&&Boolean(x.last_customer_message_at);
+  }
+  const rows=[...grouped.values()].sort((a,b)=>a.customerKey.localeCompare(b.customerKey,"vi")||String(a.adId||"").localeCompare(String(b.adId||"")));
+  let previous="";
+  for(const row of rows){row.showCustomerName=row.customerKey!==previous;previous=row.customerKey;row.source_type=[...row.sourceTypes].sort((a,b)=>a==="Bình luận"?-1:1).join(" + ");row.conversation_id=row.conversationIds.join(", ")}
+  return rows;
 }`;
 if(!source.includes(oldMapLeads)) throw new Error("V7_MAP_LEADS_ANCHOR_NOT_FOUND");
 source=source.replace(oldMapLeads,newMapLeads);
@@ -78,7 +97,11 @@ source=source.replaceAll(loopEnd,'    } catch (e) { result.errors.push(`${accoun
 
 source=source.replace(
   '<div class="card table"><table><thead><tr><th>#</th><th>Khách hàng</th>',
-  '<div class="card table"><table data-meta-messages="${meta.totalMessages}" data-customer-count="${leads.length}"><thead><tr><th>#</th><th>Khách hàng</th>'
+  '<div class="card table"><table data-meta-messages="${meta.totalMessages}" data-customer-count="${leads.length}" data-verified-customer-date="${leads.filter(x=>x.dateVerified).length}" data-fallback-date="${leads.filter(x=>!x.dateVerified).length}"><thead><tr><th>#</th><th>Khách hàng</th>'
+);
+source=source.replaceAll(
+  '<td><b>${esc(x.name)}</b><br><small>${esc(x.conversation_id)}</small></td>',
+  '<td>${x.showCustomerName===false?"":\`<b>\${esc(x.name)}</b><br><small>\${esc(x.conversation_id)}</small>\`}</td>'
 );
 source=source.replaceAll(
   '<td>${esc(x.product)}</td><td class="tags">',
