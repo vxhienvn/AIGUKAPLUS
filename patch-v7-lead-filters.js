@@ -129,7 +129,7 @@ if (!source.includes(oldSetup)) {
 }
 source = source.replace(oldSetup, newSetup);
 
-const leadCounterCss = String.raw`.lead-head-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:21px;margin-left:7px;padding:0 8px;border-radius:999px;color:#fff;font:700 11px Arial,sans-serif;vertical-align:middle;box-shadow:0 1px 2px #0002}.lead-head-count.customers{background:#155eef}.lead-head-count.contacts{background:#067647}`;
+const leadCounterCss = String.raw`.lead-head-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:21px;margin-left:7px;padding:0 8px;border-radius:999px;color:#fff;font:700 11px Arial,sans-serif;vertical-align:middle;box-shadow:0 1px 2px #0002}.lead-head-count.messages{background:#155eef}.lead-head-count.customers{background:#475467}.lead-head-count.contacts{background:#067647}`;
 source = source.replace("</style>", leadCounterCss + "</style>");
 
 const counterSetupAnchor = "document.querySelectorAll('table').forEach(table=>{";
@@ -144,11 +144,15 @@ function updateLeadHeaderCounts(table){
   if(customerIndex<0||contactIndex<0)return;
   const rows=[...(table.tBodies[0]?.rows||[])].filter(row=>row.style.display!=='none'&&row.cells.length>contactIndex);
   const contactCount=rows.filter(row=>contactCategory(row.cells[contactIndex].innerText)==='Có SĐT/Zalo').length;
+  const metaMessages=Number(table.dataset.metaMessages||0);
+  let messageBadge=headers[customerIndex].querySelector('.lead-head-count.messages');
+  if(!messageBadge){messageBadge=document.createElement('span');messageBadge.className='lead-head-count messages';messageBadge.title='Tổng tin nhắn Meta trong khoảng ngày đã chọn';headers[customerIndex].appendChild(messageBadge)}
   let customerBadge=headers[customerIndex].querySelector('.lead-head-count.customers');
   if(!customerBadge){customerBadge=document.createElement('span');customerBadge.className='lead-head-count customers';customerBadge.title='Số khách hàng đang hiển thị';headers[customerIndex].appendChild(customerBadge)}
   let contactBadge=headers[contactIndex].querySelector('.lead-head-count.contacts');
   if(!contactBadge){contactBadge=document.createElement('span');contactBadge.className='lead-head-count contacts';contactBadge.title='Số khách có SĐT/Zalo đang hiển thị';const filterButton=headers[contactIndex].querySelector('.col-filter-btn');filterButton?headers[contactIndex].insertBefore(contactBadge,filterButton):headers[contactIndex].appendChild(contactBadge)}
-  customerBadge.textContent=String(rows.length);
+  messageBadge.textContent='Tin Meta '+String(metaMessages);
+  customerBadge.textContent='Khách '+String(rows.length);
   contactBadge.textContent=String(contactCount);
 }
 const applyFiltersBase=applyFilters;
