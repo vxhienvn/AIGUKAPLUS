@@ -1,14 +1,14 @@
 {
   "name": "aiguka-v8-railway-admin",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "description": "AIGUKA V8 core with stable V7 reporting dashboard",
+  "description": "AIGUKA V8 core with stable V7 reporting and Facebook connection",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "node materialize-v7-dashboard.js && node patch-server.js && node server-fixed.js"
+    "start": "node start.js"
   },
   "dependencies": {
     "express": "^4.21.2",
