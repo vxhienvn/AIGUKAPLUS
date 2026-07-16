@@ -60,6 +60,19 @@ source = source.replace(
 );
 source = source.replaceAll("META_TOKEN", "getMetaToken()");
 
+source = source.replaceAll(
+  'selected = act(req.query.account) || "all"',
+  'selected = String(req.query.account || "all") === "all" ? "all" : act(req.query.account)',
+);
+source = source.replaceAll(
+  "selected=act(req.query.account)||'all'",
+  "selected=String(req.query.account||'all')==='all'?'all':act(req.query.account)",
+);
+
+if (source.includes("account=act_all")) {
+  source = source.replaceAll("account=act_all", "account=all");
+}
+
 if (!source.includes("/facebook-connect")) {
   source = source.replace(
     '<hr style="border-color:#334155">',
@@ -69,5 +82,5 @@ if (!source.includes("/facebook-connect")) {
 
 fs.writeFileSync("v7-dashboard-stable.js", source, "utf8");
 console.log(
-  `[AIGUKA] Stable V7 dashboard materialized: ${sourceBuffer.length} bytes · ${md5} · dynamic Meta token enabled`,
+  `[AIGUKA] Stable V7 dashboard materialized: ${sourceBuffer.length} bytes · ${md5} · all-account filter fixed`,
 );
