@@ -42,7 +42,7 @@ const newMapLeads=`function mapLeads(pancakeRows, adsRows, since, until) {
   }
   const candidates=pancakeRows.filter(x => {
     const d=dateKey(x.last_customer_message_at||x.updated_at);
-    return d&&d>=since&&d<=until&&x.last_message_is_customer!==false;
+    return d&&d>=since&&d<=until&&(x.source_type==="Bình luận"||x.last_message_is_customer!==false);
   });
   const knownByCustomer=new Map(),knownByName=new Map();
   for(const x of candidates){
