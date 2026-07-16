@@ -146,7 +146,7 @@ function pancakeBuildCustomerRow(conv) {
         updated_at: conv.updated_at,
         last_customer_message_at: conv.last_customer_message_at || conv.last_message?.created_time || conv.last_message?.created_at || "",
         last_message_from_id: conv.last_message?.from?.id || conv.last_message?.sender_id || "",
-        last_message_is_customer: conv.last_message?.from?.id ? String(conv.last_message.from.id) !== String(PANCAKE_PAGE_ID) : null,
+        last_message_is_customer: isComment ? true : (conv.last_message?.from?.id ? String(conv.last_message.from.id) !== String(PANCAKE_PAGE_ID) : null),
         message_count: conv.message_count || 0,
         has_phone: Boolean(conv.has_phone || phones.length),
         has_zalo: hasZalo,
