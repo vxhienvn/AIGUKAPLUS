@@ -15,7 +15,7 @@ import { patchLearningUi } from "./learning-ui-patch.js";
 import { patchDashboardUi } from "./dashboard-ui-patch.js";
 import { repairExtraUiHtml } from "./repair-ui.js";
 import { installStableV7Dashboard } from "./v7-dashboard-stable.js";
-import { installAiProviderManager } from "./ai-provider-manager.js";`;
+import { installAiProviderManager } from "./ai-provider-manager.js";\nimport { installDriveSlideManager } from "./drive-slide-manager.js";`;
 
 if (!source.includes('from "./v7-dashboard-stable.js"')) {
   if (source.includes(importAnchor)) source = source.replace(importAnchor, imports);
@@ -54,6 +54,7 @@ installBotControlUi(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC
 installReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 installMetaFacebookLogin(app);
 installAiProviderManager(app);
+installDriveSlideManager(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 app.get("/learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/v8-learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/control-center",(_req,res)=>res.redirect(302,"/bot-control"));
