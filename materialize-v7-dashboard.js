@@ -49,6 +49,17 @@ if (sourceBuffer.length !== expectedBytes || md5 !== expectedMd5) {
 }
 
 let source = sourceBuffer.toString("utf8");
+
+const tokenDeclaration = 'const META_TOKEN = process.env.META_ACCESS_TOKEN || process.env.META_USER_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN || process.env.USER_ACCESS_TOKEN || "";';
+if (!source.includes(tokenDeclaration)) {
+  throw new Error("V7_META_TOKEN_DECLARATION_NOT_FOUND");
+}
+source = source.replace(
+  tokenDeclaration,
+  'const getMetaToken = () => process.env.META_ACCESS_TOKEN || process.env.META_USER_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN || process.env.USER_ACCESS_TOKEN || "";',
+);
+source = source.replaceAll("META_TOKEN", "getMetaToken()");
+
 if (!source.includes("/facebook-connect")) {
   source = source.replace(
     '<hr style="border-color:#334155">',
@@ -58,5 +69,5 @@ if (!source.includes("/facebook-connect")) {
 
 fs.writeFileSync("v7-dashboard-stable.js", source, "utf8");
 console.log(
-  `[AIGUKA] Stable V7 dashboard materialized: ${sourceBuffer.length} bytes · ${md5} · Facebook connection menu added`,
+  `[AIGUKA] Stable V7 dashboard materialized: ${sourceBuffer.length} bytes · ${md5} · dynamic Meta token enabled`,
 );
