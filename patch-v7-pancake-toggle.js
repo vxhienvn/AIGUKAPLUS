@@ -1,0 +1,11 @@
+import fs from "node:fs";
+const file="v7-dashboard-stable.js";
+let source=fs.readFileSync(file,"utf8");
+const css=`.integration-strip{display:flex;gap:14px;align-items:center;justify-content:flex-end;padding:10px 14px;margin-bottom:12px;background:#fff;border:1px solid #d0d5dd;border-radius:10px}.integration-switch{display:flex;align-items:center;gap:7px;font-weight:700}.integration-switch input{width:38px;height:20px;accent-color:#155eef}.integration-source{margin-right:auto;color:#344054;font-size:13px}.integration-source b{color:#155eef}`;
+source=source.replace("</style>",css+"</style>");
+const toolbar=`<div class="integration-strip"><div class="integration-source">Nguồn hội thoại chính: <b>Meta Business</b> · Pancake chỉ bổ sung tag nhân viên</div><label class="integration-switch"><input id="pancake-connection-toggle" type="checkbox"> Kết nối Pancake</label><label class="integration-switch"><input id="pancake-sync-toggle" type="checkbox"> Đồng bộ tag Pancake</label><span id="pancake-toggle-status"></span></div>`;
+source=source.replace('<main class="main">${body}</main>','<main class="main">'+toolbar+'${body}</main>');
+const script=`<script>(function(){const c=document.getElementById("pancake-connection-toggle"),s=document.getElementById("pancake-sync-toggle"),st=document.getElementById("pancake-toggle-status");if(!c||!s)return;async function load(){try{const r=await fetch("/api/integrations/pancake",{cache:"no-store"}),j=await r.json();c.checked=j.data?.connection_enabled!==false;s.checked=j.data?.message_sync_enabled!==false;st.textContent="Đã tải"}catch(e){st.textContent="Lỗi tải trạng thái"}}async function save(input,key){input.disabled=true;st.textContent="Đang lưu…";try{const r=await fetch("/api/integrations/pancake",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({[key]:input.checked})});if(!r.ok)throw Error();st.textContent="Đã lưu";setTimeout(()=>location.reload(),350)}catch(e){st.textContent="Lỗi lưu";input.checked=!input.checked}finally{input.disabled=false}}c.onchange=()=>save(c,"connection_enabled");s.onchange=()=>save(s,"message_sync_enabled");load()}})();</script>`;
+source=source.replace("</body>",script+"</body>");
+fs.writeFileSync(file,source,"utf8");
+console.log("[AIGUKA] Pancake toggles added to all V7 statistics pages; Meta Business labelled primary");
