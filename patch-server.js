@@ -14,8 +14,7 @@ import { installMetaFacebookLogin } from "./meta-facebook-login.js";
 import { patchLearningUi } from "./learning-ui-patch.js";
 import { patchDashboardUi } from "./dashboard-ui-patch.js";
 import { repairExtraUiHtml } from "./repair-ui.js";
-import { installStableV7Dashboard } from "./v7-dashboard-stable.js";
-import { installIntegrationToggleRoutes } from "./integration-toggle-routes.js";`;
+import { installStableV7Dashboard } from "./v7-dashboard-stable.js";`;
 
 if (!source.includes('from "./v7-dashboard-stable.js"')) {
   if (source.includes(importAnchor)) source = source.replace(importAnchor, imports);
@@ -53,7 +52,6 @@ installLearningAdminV2(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUB
 installBotControlUi(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 installReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 installMetaFacebookLogin(app);
-installIntegrationToggleRoutes(app);
 app.get("/learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/v8-learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/control-center",(_req,res)=>res.redirect(302,"/bot-control"));
