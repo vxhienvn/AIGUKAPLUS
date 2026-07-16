@@ -3,10 +3,24 @@ import fs from "node:fs";
 const file = "v7-dashboard-stable.js";
 let source = fs.readFileSync(file, "utf8");
 
-source = source.replace(
-  "const clean=v=>(String(v||'').replace(/s+/g,' ').trim()||'(Trống)');",
-  "const clean=v=>(String(v||'').replace(/\\s+/g,' ').trim()||'(Trống)');",
-);
+const cleanStart = source.indexOf("const clean=v=>");
+const cleanEnd = cleanStart >= 0 ? source.indexOf(";", cleanStart) + 1 : -1;
+if (cleanStart < 0 || cleanEnd <= cleanStart) {
+  throw new Error("V7_FILTER_CLEAN_ANCHOR_NOT_FOUND");
+}
+source =
+  source.slice(0, cleanStart) +
+  "const clean=v=>(String(v||'').trim()||'(Trống)');" +
+  source.slice(cleanEnd);
+
+const cardFunctionStart = source.indexOf("function accountCardMap() {");
+const cardMapStart = source.indexOf("const map = new Map();", cardFunctionStart);
+if (cardFunctionStart < 0 || cardMapStart < 0) {
+  throw new Error("V7_CARD_MAP_ANCHOR_NOT_FOUND");
+}
+source = source.slice(0, cardMapStart) +
+  'const map = new Map([["act_972318199015585","0177"],["act_311242249583664","0177"]]);' +
+  source.slice(cardMapStart + "const map = new Map();".length);
 
 const openStart = source.indexOf("function openFilter(table,th,col,button){");
 const setupStart = source.indexOf("document.querySelectorAll('table').forEach(table=>{", openStart);
@@ -16,17 +30,17 @@ if (openStart < 0 || setupStart < 0) {
 
 const smartOpenFilter = `function contactCategory(value){
   const text=clean(value);
-  return text!==\"(Trống)\"&&(/\\d{8,}/.test(text)||/zalo/i.test(text))?\"Có SĐT/Zalo\":\"Không có\";
+  return text!=="(Trống)"&&(/[0-9]{8,}/.test(text)||/zalo/i.test(text))?"Có SĐT/Zalo":"Không có";
 }
 function openFilter(table,th,col,button){
   closeMenu();
   const state=stateOf(table);
   const header=clean(th.childNodes[0]?.textContent||th.textContent);
-  const contactMode=/SĐT\\s*\\/\\s*Zalo/i.test(header);
+  const contactMode=header.toLowerCase().replaceAll(' ','').includes('sđt/zalo');
   const rows=[...(table.tBodies[0]?.rows||[])].filter(r=>r.cells.length>col);
   const rawValues=rows.map(r=>clean(r.cells[col].innerText));
   const values=contactMode
-    ? [\"Có SĐT/Zalo\",\"Không có\"]
+    ? ["Có SĐT/Zalo","Không có"]
     : [...new Set(rawValues)].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   const currentActual=state.filters.get(col);
   const current=contactMode&&currentActual
@@ -116,4 +130,4 @@ if (!source.includes(oldSetup)) {
 source = source.replace(oldSetup, newSetup);
 
 fs.writeFileSync(file, source, "utf8");
-console.log("[AIGUKA] Lead filters simplified: no STT/name filter; SĐT/Zalo uses yes/no filter");
+console.log("[AIGUKA] Filters restored; lead contact filter simplified; verified Visa 0177 mapped");
