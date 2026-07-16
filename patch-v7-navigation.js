@@ -5,8 +5,6 @@ source = source.replaceAll("⚙ Quản lý Page/TEST", "⚙ Điều khiển BOT 
 source = source.replaceAll("AI Học có kiểm duyệt", "AI Học & Quản lý Prompt");
 const learningNav = "${nav('/v8-learning','AI Học & Quản lý Prompt','learning')}";
 const providersNav = "${nav('/ai-providers','🧠 Tích hợp OpenAI & Gemini','ai-providers')}";
-const slidesNav = "${nav('/drive-slides','🖼 Mapping & Test slide','drive-slides')}";
 if (!source.includes(providersNav)) source = source.replace(learningNav, learningNav + providersNav);
-if (!source.includes(slidesNav)) source = source.replace(providersNav, providersNav + slidesNav);
 fs.writeFileSync(file, source, "utf8");
 console.log("[AIGUKA] Dashboard menu now includes OpenAI and Gemini integration");
