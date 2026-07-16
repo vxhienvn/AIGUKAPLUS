@@ -34,14 +34,19 @@ function looksLikeMessage(obj) {
   const hasActor = Boolean(obj.from || obj.from_id || obj.sender_id || obj.user_id || obj.admin_id || obj.is_from_page !== undefined);
   return (hasText || hasAttachment) && (hasTime || hasActor);
 }
-function collectMessages(node, out = [], depth = 0) {
-  if (!node || depth > 9) return out;
-  if (Array.isArray(node)) { for (const item of node) collectMessages(item, out, depth + 1); return out; }
+function collectMessages(node, out = [], depth = 0, seen = new WeakSet()) {
+  if (!node || depth > 12) return out;
   if (typeof node !== "object") return out;
+  if (seen.has(node)) return out;
+  seen.add(node);
+  if (Array.isArray(node)) {
+    for (const item of node) collectMessages(item, out, depth + 1, seen);
+    return out;
+  }
   if (looksLikeMessage(node)) out.push(node);
-  for (const [key, value] of Object.entries(node)) {
-    if (!value) continue;
-    if (["messages", "conversation_messages", "data", "items", "comments", "list", "results"].includes(String(key).toLowerCase())) collectMessages(value, out, depth + 1);
+  for (const value of Object.values(node)) {
+    if (!value || typeof value !== "object") continue;
+    collectMessages(value, out, depth + 1, seen);
   }
   return out;
 }
