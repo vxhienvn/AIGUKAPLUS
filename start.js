@@ -27,11 +27,15 @@ await import("./patch-v7-daily-grouped.js");
 await import("./patch-v7-daily-staff-history.js");
 await import("./patch-v7-daily-layout-sample.js");
 await import("./patch-v7-filter-final.js");
-// Must run after every patch that replaces the dailyPage→leadsPage section.
-await import("./patch-v7-leads-meta-primary.js");
-await import("./patch-v7-leads-referral-source.js");
+
+// Daily page must be finalized before Lead helpers are inserted. Otherwise a
+// daily patch can delete shiftLeadDate/loadUnifiedLeadReport with the range it replaces.
 await import("./patch-v7-daily-staff-aligned.js");
 await import("./patch-v7-daily-runtime-self-contained.js");
+await import("./patch-v7-leads-meta-primary.js");
+await import("./patch-v7-leads-referral-source.js");
+await import("./patch-v7-runtime-integrity.js");
+
 await import("./patch-learning-client.js");
 await import("./patch-drive-slide-manager-v2.js");
 await import("./patch-server.js");
