@@ -50,11 +50,13 @@ jobs:
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
           const cache = {};
+          const GRAPH_VERSION = 'v23.0';
           const act = value => String(value || '');
           const esc = value => String(value || '');
           const csv = value => String(value || '');
           const dateKey = value => String(value || '');
           const money = value => String(value || '');
+          async function fetchJson(){ return {}; }
           function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
           function filterForm(){ return ''; }
           function layout(){ return ''; }
@@ -75,7 +77,8 @@ jobs:
           node patch-v7-daily-grouped.js
           node patch-v7-leads-meta-primary.js
           node --check v7-dashboard-stable.js
-          grep -q 'AIGUKA_META_PRIMARY_LEADS_V1' v7-dashboard-stable.js
+          grep -q 'AIGUKA_META_PRIMARY_LEADS_V2' v7-dashboard-stable.js
+          grep -q 'v8_meta_conversation_starts' v7-dashboard-stable.js
           grep -q 'async function loadUnifiedLeadReport' v7-dashboard-stable.js
           grep -q 'const report = await loadUnifiedLeadReport' v7-dashboard-stable.js
           rm v7-dashboard-stable.js
