@@ -45,5 +45,7 @@ await import("./patch-drive-slide-manager-v2.js");
 await import("./patch-drive-login-only.js");
 await import("./patch-drive-v7-mode.js");
 await import("./patch-bot-page-mode-save.js");
+await import("./patch-ai-context-nav.js");
+await import("./patch-ai-context-server.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
