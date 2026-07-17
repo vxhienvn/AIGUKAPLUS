@@ -43,9 +43,12 @@ loadBlock = loadBlock
   .replaceAll("const [accounts, meta, pancake, starts] = await Promise.all([", "const [accounts, meta, pancake, referrals] = await Promise.all([")
   .replaceAll("fetchMetaConversationStarts(p.since, p.until)", "fetchMetaAdReferralEntries(p.since, p.until)")
   .replaceAll("(starts.rows || [])", "(referrals.rows || [])")
-  .replaceAll("    starts,\n    leads,", "    referrals,\n    leads,")
-  .replaceAll("report.starts.error", "report.referrals.error");
+  .replaceAll("    starts,\n    leads,", "    referrals,\n    leads,");
 source = source.slice(0, loadStart) + loadBlock + source.slice(loadEnd);
+
+// leadsPage nằm ngoài loadBlock, nên phải đổi property trên toàn source sau khi
+// loadUnifiedLeadReport đã trả về `referrals` thay cho `starts`.
+source = source.replaceAll("report.starts.error", "report.referrals.error");
 
 source = source.replaceAll(
   "Mỗi khách chỉ tính 1 lần · theo múi giờ riêng của từng tài khoản quảng cáo",
@@ -58,6 +61,9 @@ const dailyBlock = dailyStart >= 0 && dailyEnd > dailyStart ? source.slice(daily
 const leadFetchStart = source.indexOf("async function fetchMetaAdReferralEntries");
 const leadFetchEnd = source.indexOf("\n\nasync function resolveLeadAdMap", leadFetchStart);
 const leadFetchBlock = leadFetchStart >= 0 && leadFetchEnd > leadFetchStart ? source.slice(leadFetchStart, leadFetchEnd) : "";
+const leadsPageStart = source.indexOf("async function leadsPage(req,res)");
+const installStart = source.indexOf("export function installStableV7Dashboard", leadsPageStart);
+const leadsPageBlock = leadsPageStart >= 0 && installStart > leadsPageStart ? source.slice(leadsPageStart, installStart) : "";
 
 if (
   !dailyBlock.includes("/rest/v1/v8_meta_conversation_starts?") ||
@@ -75,6 +81,9 @@ if (
 }
 if (!source.includes("const [accounts, meta, pancake, referrals]")) {
   throw new Error("V7_REFERRAL_SOURCE_REPORT_RENAME_FAILED");
+}
+if (!leadsPageBlock.includes("report.referrals.error") || leadsPageBlock.includes("report.starts.error")) {
+  throw new Error("V7_REFERRAL_SOURCE_LEADS_PAGE_PROPERTY_MISMATCH");
 }
 
 fs.writeFileSync(file, source, "utf8");
