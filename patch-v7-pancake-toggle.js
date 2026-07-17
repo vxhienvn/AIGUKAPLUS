@@ -14,12 +14,19 @@ if (!source.includes("pancake-global-toggle")) source = source.replace(slidesNav
 const script = `<script>(function(){
 const toggle=document.getElementById("pancake-global-toggle"),status=document.getElementById("pancake-global-status"),dot=document.getElementById("pancake-global-dot");
 if(!toggle||!status||!dot)return;
+const endpoint="/learning-reviewed/api/integrations";
 function show(enabled,text,error){toggle.checked=Boolean(enabled);status.textContent=text;dot.className="pancake-nav-dot"+(error?" error":(enabled?" on":""));}
-async function load(){toggle.disabled=true;try{const r=await fetch("/api/integrations/pancake",{cache:"no-store"}),j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||"Không tải được");const enabled=j.data?.connection_enabled!==false&&j.data?.message_sync_enabled!==false;show(enabled,enabled?"Đang bật toàn hệ thống":"Đang tắt toàn hệ thống",false)}catch(e){show(false,"Lỗi đọc trạng thái",true)}finally{toggle.disabled=false}}
-async function save(){const enabled=toggle.checked;toggle.disabled=true;status.textContent="Đang lưu…";try{const r=await fetch("/api/integrations/pancake",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({connection_enabled:enabled,message_sync_enabled:enabled})}),j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||"Không lưu được");show(enabled,enabled?"Đã bật toàn hệ thống":"Đã tắt toàn hệ thống",false)}catch(e){show(!enabled,"Lỗi lưu trạng thái",true)}finally{toggle.disabled=false}}
+function pancakeRow(payload){const rows=Array.isArray(payload?.data)?payload.data:[];return rows.find(row=>String(row?.integration_key||"").toLowerCase()==="pancake")||null;}
+async function parseResponse(response){const text=await response.text();let data;try{data=text?JSON.parse(text):{};}catch{throw new Error("Phản hồi máy chủ không hợp lệ");}if(!response.ok||data.ok===false)throw new Error(data.error||data.message||("HTTP "+response.status));return data;}
+async function load(){toggle.disabled=true;try{const data=await parseResponse(await fetch(endpoint,{cache:"no-store",headers:{accept:"application/json"}}));const row=pancakeRow(data);if(!row)throw new Error("Chưa có cấu hình Pancake");const enabled=row.connection_enabled!==false&&row.message_sync_enabled!==false;show(enabled,enabled?"Đang bật toàn hệ thống":"Đang tắt toàn hệ thống",false);}catch(error){show(false,"Lỗi đọc trạng thái: "+error.message,true);}finally{toggle.disabled=false;}}
+async function save(){const enabled=toggle.checked;toggle.disabled=true;status.textContent="Đang lưu…";try{const data=await parseResponse(await fetch(endpoint,{method:"PATCH",headers:{"content-type":"application/json",accept:"application/json"},body:JSON.stringify({integration_key:"pancake",connection_enabled:enabled,message_sync_enabled:enabled})}));const row=Array.isArray(data?.data)?data.data[0]:data?.data;const saved=row?row.connection_enabled!==false&&row.message_sync_enabled!==false:enabled;show(saved,saved?"Đã bật toàn hệ thống":"Đã tắt toàn hệ thống",false);}catch(error){show(!enabled,"Lỗi lưu trạng thái: "+error.message,true);}finally{toggle.disabled=false;}}
 toggle.addEventListener("change",save);load();
 })();</script>`;
-if (!source.includes("pancake-nav-dot\"+(error")) source = source.replace("</body>", script + "</body>");
+if (!source.includes('const endpoint="/learning-reviewed/api/integrations"')) {
+  const oldScriptPattern = /<script>\(function\(\)\{\nconst toggle=document\.getElementById\("pancake-global-toggle"\)[\s\S]*?\}\)\(\);<\/script>/;
+  if (oldScriptPattern.test(source)) source = source.replace(oldScriptPattern, script);
+  else source = source.replace("</body>", script + "</body>");
+}
 
 fs.writeFileSync(file, source, "utf8");
-console.log("[AIGUKA] Persistent Pancake control installed in left navigation");
+console.log("[AIGUKA] Persistent Pancake control installed with working integration API");
