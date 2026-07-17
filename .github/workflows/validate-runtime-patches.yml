@@ -22,6 +22,7 @@ jobs:
           node --check patch-v7-pancake-history.js
           node --check patch-v7-pancake-toggle.js
           node --check patch-v7-daily-staff-history.js
+          node --check patch-v7-leads-meta-primary.js
           node --check start.js
       - name: Apply and validate slide patch
         run: |
@@ -35,3 +36,31 @@ jobs:
           node patch-v7-pancake-history.js
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
+      - name: Apply and validate Meta-primary Leads patch
+        run: |
+          cat > v7-dashboard-stable.js <<'EOF'
+          const cache = {};
+          const act = value => String(value || '');
+          const esc = value => String(value || '');
+          const csv = value => String(value || '');
+          const dateKey = value => String(value || '');
+          function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
+          function filterForm(){ return ''; }
+          function layout(){ return ''; }
+          async function getAccounts(){ return []; }
+          async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
+          async function fetchPancake(){ return { rows: [], error: null }; }
+          async function fetchDaily(){ return { rows: [] }; }
+          function mapLeads(){ return []; }
+          async function leadsPage(req,res) {}
+
+          export function installStableV7Dashboard(app) {
+            app.get('/export',async(req,res)=>{const p=period(req.query,'dashboard'),selected=act(req.query.account)||'all',type=String(req.query.type||'daily');let rows=[];if(type==='leads'){rows=[];}else{rows=[];}const head=[];res.send('');});
+            console.log('[AIGUKA] fixture');
+          }
+          EOF
+          node patch-v7-leads-meta-primary.js
+          node --check v7-dashboard-stable.js
+          grep -q 'AIGUKA_META_PRIMARY_LEADS_V1' v7-dashboard-stable.js
+          grep -q 'loadUnifiedLeadReport' v7-dashboard-stable.js
+          rm v7-dashboard-stable.js
