@@ -138,6 +138,13 @@ source = source.replace(
   "const header=clean(table.querySelectorAll('thead th')[col]?.childNodes[0]?.textContent||table.querySelectorAll('thead th')[col]?.textContent);let matches=false;if(/^nhân viên$/i.test(header)){matches=[...row.querySelectorAll('[data-staff-name]')].some(x=>selected.has(clean(x.dataset.staffName)))}else if(/^(tài khoản|tài khoản qc)$/i.test(header)&&row.dataset.account){matches=selected.has(clean(row.dataset.account))}else{matches=row.cells.length>col&&selected.has(clean(row.cells[col].innerText))}if(!matches){show=false;break}"
 );
 
+const dashboardRowAnchor = 'const c=linked.filter(l=>l.has_phone||l.has_zalo).length;return `<tr><td>${i+1}</td>';
+const dashboardRowReplacement = 'const c=linked.filter(l=>l.has_phone||l.has_zalo).length,hot=linked.filter(l=>l.hot_lead).length;return `<tr data-hot="${hot}"><td>${i+1}</td>';
+if (!source.includes(dashboardRowAnchor)) {
+  throw new Error("V7_DASHBOARD_HOT_ROW_ANCHOR_NOT_FOUND");
+}
+source = source.replace(dashboardRowAnchor, dashboardRowReplacement);
+
 const leadCounterCss = String.raw`.lead-head-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:21px;margin-left:7px;padding:0 8px;border-radius:999px;color:#fff;font:700 11px Arial,sans-serif;vertical-align:middle;box-shadow:0 1px 2px #0002}.lead-head-count.messages{background:#155eef}.lead-head-count.customers{background:#475467}.lead-head-count.contacts{background:#067647}`;
 source = source.replace("</style>", leadCounterCss + "</style>");
 
@@ -171,9 +178,9 @@ function updateVisibleDashboardStats(table){
   if(spendIndex<0||messageIndex<0)return;
   const rows=[...(table.tBodies[0]?.rows||[])].filter(r=>r.style.display!=='none'&&!r.classList.contains('daily-total-row'));
   const number=v=>Number(String(v||'').replace(/[^0-9-]/g,''))||0;
-  const spend=rows.reduce((s,r)=>s+number(r.cells[spendIndex]?.innerText),0),messages=rows.reduce((s,r)=>s+number(r.cells[messageIndex]?.innerText),0),pancake=pancakeIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[pancakeIndex]?.innerText),0),contacts=contactIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[contactIndex]?.innerText),0);
+  const spend=rows.reduce((s,r)=>s+number(r.cells[spendIndex]?.innerText),0),messages=rows.reduce((s,r)=>s+number(r.cells[messageIndex]?.innerText),0),pancake=pancakeIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[pancakeIndex]?.innerText),0),contacts=contactIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[contactIndex]?.innerText),0),hot=rows.reduce((s,r)=>s+number(r.dataset.hot||0),0);
   const accounts=new Set(rows.map(r=>accountIndex>=0?clean(r.dataset.account||r.cells[accountIndex]?.innerText):'').filter(x=>x&&x!=='(Trống)'));
-  document.querySelectorAll('.stats .stat').forEach(card=>{const label=clean(card.childNodes[0]?.textContent);const value=card.querySelector('b');if(!value)return;if(/^Chi tiêu$/i.test(label))value.textContent=spend.toLocaleString('vi-VN')+' đ';else if(/^Tin nhắn Meta$/i.test(label))value.textContent=String(messages);else if(/^Hội thoại Pancake$/i.test(label)&&pancakeIndex>=0)value.textContent=String(pancake);else if(label==='Có SĐT/Zalo'&&contactIndex>=0)value.textContent=String(contacts);else if(/^Tài khoản QC$/i.test(label)&&accountIndex>=0)value.textContent=String(accounts.size)});
+  document.querySelectorAll('.stats .stat').forEach(card=>{const label=clean(card.childNodes[0]?.textContent);const value=card.querySelector('b');if(!value)return;if(/^Chi tiêu$/i.test(label))value.textContent=spend.toLocaleString('vi-VN')+' đ';else if(/^Tin nhắn Meta$/i.test(label))value.textContent=String(messages);else if(/^Hội thoại Pancake$/i.test(label)&&pancakeIndex>=0)value.textContent=String(pancake);else if(label==='Có SĐT/Zalo'&&contactIndex>=0)value.textContent=String(contacts);else if(label==='Khách nóng')value.textContent=String(hot);else if(/^Tài khoản QC$/i.test(label)&&accountIndex>=0)value.textContent=String(accounts.size)});
 }
 const applyFiltersBase=applyFilters;
 applyFilters=function(table){applyFiltersBase(table);updateLeadHeaderCounts(table);updateVisibleDashboardStats(table)};
