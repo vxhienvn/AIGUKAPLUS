@@ -74,7 +74,7 @@ async function enrichPancakeProducts(rows = []) {
 `;
 source = source.replace(fetchAnchor, helper + "\n" + fetchAnchor);
 const oldLine = "try { result.rows = (await pancakeFetchConversations(limit)).map(pancakeBuildCustomerRow); }";
-const newLine = "try { let baseRows=[]; try { baseRows=(await pancakeFetchConversations(limit)).map(pancakeBuildCustomerRow); } catch(error) { result.errors.push('Pancake: '+error.message); } if(!baseRows.length) { baseRows=await fetchMetaLeadFallback(Math.max(5000,limit)); result.source='meta_supabase'; } result.rows = await enrichPancakeProducts(baseRows); }";
+const newLine = "try { let baseRows=[]; try { baseRows=(await pancakeFetchConversations(limit)).map(pancakeBuildCustomerRow); } catch(error) { result.error='Pancake: '+error.message; } if(!baseRows.length) { baseRows=await fetchMetaLeadFallback(Math.max(5000,limit)); result.source='meta_supabase'; } result.rows = await enrichPancakeProducts(baseRows); }";
 if (!source.includes(oldLine)) throw new Error("V7_PRODUCT_ROWS_ANCHOR_NOT_FOUND");
 source = source.replace(oldLine, newLine);
 fs.writeFileSync(file, source, "utf8");
