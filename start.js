@@ -46,5 +46,6 @@ await import("./patch-bot-page-mode-save.js");
 await import("./patch-ai-context-nav.js");
 await import("./patch-drive-v3-recursive.js");
 await import("./patch-drive-v3-sync-upsert.js");
+await import("./patch-ai-context-v2-restore.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
