@@ -36,6 +36,7 @@ await import("./patch-v7-daily-runtime-self-contained.js");
 await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
 await import("./patch-v7-pancake-tag-completeness.js");
+await import("./patch-v7-pancake-tag-final.js");
 await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
 
