@@ -20,9 +20,13 @@ source = source
   .replaceAll("message_count: Number(row.message_count || 0),", "message_count: 1,")
   .replaceAll('snippet: row.last_message_text || row.first_message_text || "",', 'snippet: row.referral_message_text || "",')
   .replaceAll("isAdConversation: row.is_ad_conversation === true,", "isAdConversation: row.is_ad_referral === true,")
+  .replaceAll("const [accounts, meta, pancake, starts] = await Promise.all([", "const [accounts, meta, pancake, referrals] = await Promise.all([")
+  .replaceAll("(starts.rows || [])", "(referrals.rows || [])")
+  .replaceAll("    starts,\n    leads,", "    referrals,\n    leads,")
+  .replaceAll("report.starts.error", "report.referrals.error")
   .replaceAll("Mỗi khách chỉ tính 1 lần · theo múi giờ riêng của từng tài khoản quảng cáo", "Mỗi khách từ từng QC chỉ tính 1 lần/ngày · gồm cả khách cũ quay lại từ quảng cáo");
 
-if (!source.includes("v8_meta_ad_referral_entries")) {
+if (!source.includes("v8_meta_ad_referral_entries") || !source.includes("const [accounts, meta, pancake, referrals]")) {
   throw new Error("V7_REFERRAL_SOURCE_PATCH_FAILED");
 }
 
