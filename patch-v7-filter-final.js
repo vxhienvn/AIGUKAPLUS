@@ -4,7 +4,7 @@ let source=fs.readFileSync(file,"utf8");
 const script=String.raw`<script id="filter-final-sync">(function(){
 const allowed=new Set(["ngày","tài khoản qc","tài khoản","thẻ / phương thức","quảng cáo","campaign / ad set","chiến dịch / nhóm quảng cáo","khách hàng","sđt/zalo","sđt / zalo","sản phẩm","tag pancake","nguồn khách","loại tương tác","nhân viên","trạng thái"]);
 const states=new WeakMap();let menu=null;
-function title(th){const c=th.cloneNode(true);c.querySelectorAll("button").forEach(x=>x.remove());return String(c.textContent||"").split(String.fromCharCode(10)).join(" ").trim().toLowerCase()}
+function title(th){const c=th.cloneNode(true);c.querySelectorAll("button,.lead-head-count").forEach(x=>x.remove());return String(c.textContent||"").split(String.fromCharCode(10)).join(" ").trim().toLowerCase()}
 function value(v){return String(v||"").split(String.fromCharCode(10)).join(" ").trim()||"(Trống)"}function cellValue(table,row,col,heading){if(row.classList.contains("daily-account-row")){if(heading==="ngày")return value(row.dataset.date);if(heading==="tài khoản qc"||heading==="tài khoản")return value(row.dataset.account||row.querySelector(".account-name-cell")?.innerText);if(heading==="thẻ / phương thức")return value(row.querySelector(".payment-method-cell")?.innerText);if(heading==="nhân viên"){const names=[...row.querySelectorAll("[data-staff-name]")].map(x=>x.dataset.staffName).filter(Boolean);return value(names.join(", ")||row.querySelector(".staff-content")?.innerText)}}return value(row.cells[col]?.innerText)}
 function state(table){if(!states.has(table))states.set(table,new Map());return states.get(table)}
 function close(){if(menu){menu.remove();menu=null}}
