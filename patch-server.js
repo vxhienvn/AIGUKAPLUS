@@ -76,8 +76,8 @@ for (const version of [
   "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed",
   "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters","1.3.4-practical-lead-filters",
   "1.3.5-filter-card-fixed","1.4.0-learning-bot-control-restored","1.4.1-learning-data-complete",
-  "1.5.0-ai-context-manager"
-]) source = source.replaceAll(version, "1.6.0-drive-context-lead-stable");
+  "1.5.0-ai-context-manager","1.6.0-drive-context-lead-stable"
+]) source = source.replaceAll(version, "1.6.1-lead-v4-drive-recursive");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Stable Lead table, Drive V3, AI Context V2 and template exports wired");
+console.log("[AIGUKA] Lead V4, recursive Drive, AI Context V2 and template exports wired");
