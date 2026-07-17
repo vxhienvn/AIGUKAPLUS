@@ -37,7 +37,7 @@ await import("./patch-v7-pancake-tag-completeness.js");
 await import("./patch-v7-pancake-tag-final.js");
 await import("./patch-v7-daily-final-anchor-fix.js");
 await import("./patch-v7-daily-final.js");
-await import("./patch-v7-lead-table-v3.js");
+await import("./patch-v7-lead-table-v4.js");
 await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
 
