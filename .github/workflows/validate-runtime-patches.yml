@@ -3,6 +3,7 @@ name: Validate runtime patches
 on:
   push:
     branches:
+      - main
       - fix/slide-staff-pancake-20260717
   pull_request:
 
@@ -24,6 +25,15 @@ jobs:
           node --check patch-v7-daily-staff-history.js
           node --check patch-v7-leads-meta-primary.js
           node --check start.js
+      - name: Check Leads patch startup order
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const source=fs.readFileSync('start.js','utf8');
+          const daily=source.indexOf('patch-v7-daily-grouped.js');
+          const leads=source.indexOf('patch-v7-leads-meta-primary.js');
+          if(daily<0||leads<0||leads<daily) throw new Error('LEADS_PATCH_MUST_RUN_AFTER_DAILY_GROUPED');
+          NODE
       - name: Apply and validate slide patch
         run: |
           cp drive-slide-manager.js /tmp/drive-slide-manager.js
@@ -36,7 +46,7 @@ jobs:
           node patch-v7-pancake-history.js
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
-      - name: Apply and validate Meta-primary Leads patch
+      - name: Apply runtime order and validate Meta-primary Leads
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
           const cache = {};
@@ -44,14 +54,17 @@ jobs:
           const esc = value => String(value || '');
           const csv = value => String(value || '');
           const dateKey = value => String(value || '');
+          const money = value => String(value || '');
           function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
           function filterForm(){ return ''; }
           function layout(){ return ''; }
           async function getAccounts(){ return []; }
           async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
           async function fetchPancake(){ return { rows: [], error: null }; }
-          async function fetchDaily(){ return { rows: [] }; }
+          async function fetchDaily(){ return { rows: [], errors: [], totalSpend: 0, totalMessages: 0 }; }
           function mapLeads(){ return []; }
+          async function dailyPage(req,res) {}
+
           async function leadsPage(req,res) {}
 
           export function installStableV7Dashboard(app) {
@@ -59,8 +72,10 @@ jobs:
             console.log('[AIGUKA] fixture');
           }
           EOF
+          node patch-v7-daily-grouped.js
           node patch-v7-leads-meta-primary.js
           node --check v7-dashboard-stable.js
           grep -q 'AIGUKA_META_PRIMARY_LEADS_V1' v7-dashboard-stable.js
-          grep -q 'loadUnifiedLeadReport' v7-dashboard-stable.js
+          grep -q 'async function loadUnifiedLeadReport' v7-dashboard-stable.js
+          grep -q 'const report = await loadUnifiedLeadReport' v7-dashboard-stable.js
           rm v7-dashboard-stable.js
