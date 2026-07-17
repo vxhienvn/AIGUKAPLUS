@@ -24,15 +24,25 @@ jobs:
           node --check patch-v7-pancake-toggle.js
           node --check patch-v7-daily-staff-history.js
           node --check patch-v7-leads-meta-primary.js
+          node --check patch-v7-leads-referral-source.js
+          node --check patch-v7-daily-staff-aligned.js
+          node --check patch-v7-daily-runtime-self-contained.js
           node --check start.js
-      - name: Check Leads patch startup order
+      - name: Check runtime patch startup order
         run: |
           node - <<'NODE'
           const fs=require('fs');
           const source=fs.readFileSync('start.js','utf8');
-          const daily=source.indexOf('patch-v7-daily-grouped.js');
-          const leads=source.indexOf('patch-v7-leads-meta-primary.js');
-          if(daily<0||leads<0||leads<daily) throw new Error('LEADS_PATCH_MUST_RUN_AFTER_DAILY_GROUPED');
+          const names=[
+            'patch-v7-daily-grouped.js',
+            'patch-v7-leads-meta-primary.js',
+            'patch-v7-leads-referral-source.js',
+            'patch-v7-daily-staff-aligned.js',
+            'patch-v7-daily-runtime-self-contained.js',
+          ];
+          const positions=names.map(name=>source.indexOf(name));
+          if(positions.some(value=>value<0)) throw new Error('MISSING_RUNTIME_PATCH');
+          for(let i=1;i<positions.length;i++) if(positions[i]<=positions[i-1]) throw new Error('INVALID_RUNTIME_PATCH_ORDER:'+names[i]);
           NODE
       - name: Apply and validate slide patch
         run: |
@@ -46,7 +56,7 @@ jobs:
           node patch-v7-pancake-history.js
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
-      - name: Apply runtime order and validate Meta-primary Leads
+      - name: Apply full dashboard runtime chain
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
           const cache = {};
@@ -76,9 +86,19 @@ jobs:
           EOF
           node patch-v7-daily-grouped.js
           node patch-v7-leads-meta-primary.js
+          node patch-v7-leads-referral-source.js
+          node patch-v7-daily-staff-aligned.js
+          node patch-v7-daily-runtime-self-contained.js
           node --check v7-dashboard-stable.js
-          grep -q 'AIGUKA_META_PRIMARY_LEADS_V2' v7-dashboard-stable.js
-          grep -q 'v8_meta_conversation_starts' v7-dashboard-stable.js
-          grep -q 'async function loadUnifiedLeadReport' v7-dashboard-stable.js
-          grep -q 'const report = await loadUnifiedLeadReport' v7-dashboard-stable.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const source=fs.readFileSync('v7-dashboard-stable.js','utf8');
+          const start=source.indexOf('async function fetchMetaFirstCustomerStarts');
+          const end=source.indexOf('async function dailyPage',start);
+          if(start<0||end<0) throw new Error('DAILY_META_FIRST_LOADER_MISSING');
+          const fn=source.slice(start,end);
+          if(fn.includes('META_LEADS_SUPABASE_')) throw new Error('DAILY_LOADER_HAS_EXTERNAL_UNDEFINED_BINDING');
+          if(!fn.includes('dailySupabaseUrl')||!fn.includes('dailySupabaseKey')) throw new Error('DAILY_LOADER_LOCAL_CONFIG_MISSING');
+          if(!source.includes('Chăm sóc trong ngày')||!source.includes('Khách mới Meta')) throw new Error('DUAL_DAILY_COLUMNS_MISSING');
+          NODE
           rm v7-dashboard-stable.js
