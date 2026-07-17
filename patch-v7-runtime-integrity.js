@@ -1,0 +1,67 @@
+import fs from "node:fs";
+import { spawnSync } from "node:child_process";
+
+const file = "v7-dashboard-stable.js";
+const source = fs.readFileSync(file, "utf8");
+
+const required = [
+  ["shiftLeadDate", /function\s+shiftLeadDate\s*\(/g],
+  ["leadIdentity", /function\s+leadIdentity\s*\(/g],
+  ["resolveLeadAdMap", /async\s+function\s+resolveLeadAdMap\s*\(/g],
+  ["loadUnifiedLeadReport", /async\s+function\s+loadUnifiedLeadReport\s*\(/g],
+  ["fetchMetaFirstCustomerStarts", /async\s+function\s+fetchMetaFirstCustomerStarts\s*\(/g],
+  ["dailyPage", /async\s+function\s+dailyPage\s*\(/g],
+  ["leadsPage", /async\s+function\s+leadsPage\s*\(/g],
+];
+
+for (const [name, pattern] of required) {
+  const count = [...source.matchAll(pattern)].length;
+  if (count !== 1) {
+    throw new Error(`V7_RUNTIME_INTEGRITY_${name.toUpperCase()}_COUNT_${count}`);
+  }
+}
+
+const dailyLoaderStart = source.indexOf("async function fetchMetaFirstCustomerStarts");
+const dailyPageStart = source.indexOf("async function dailyPage", dailyLoaderStart);
+const leadLoaderStart = source.indexOf("async function loadUnifiedLeadReport");
+const leadsPageStart = source.indexOf("async function leadsPage", leadLoaderStart);
+const installStart = source.indexOf("export function installStableV7Dashboard");
+
+if (
+  dailyLoaderStart < 0 ||
+  dailyPageStart <= dailyLoaderStart ||
+  leadLoaderStart <= dailyPageStart ||
+  leadsPageStart <= leadLoaderStart ||
+  installStart <= leadsPageStart
+) {
+  throw new Error("V7_RUNTIME_INTEGRITY_FUNCTION_ORDER_INVALID");
+}
+
+const dailyLoader = source.slice(dailyLoaderStart, dailyPageStart);
+if (dailyLoader.includes("META_LEADS_SUPABASE_URL") || dailyLoader.includes("META_LEADS_SUPABASE_KEY")) {
+  throw new Error("V7_RUNTIME_INTEGRITY_DAILY_EXTERNAL_SUPABASE_BINDING");
+}
+if (!dailyLoader.includes("dailySupabaseUrl") || !dailyLoader.includes("dailySupabaseKey")) {
+  throw new Error("V7_RUNTIME_INTEGRITY_DAILY_LOCAL_SUPABASE_BINDING_MISSING");
+}
+
+const knownCalls = [
+  ["shiftLeadDate", /\bshiftLeadDate\s*\(/],
+  ["loadUnifiedLeadReport", /\bloadUnifiedLeadReport\s*\(/],
+  ["resolveLeadAdMap", /\bresolveLeadAdMap\s*\(/],
+  ["leadIdentity", /\bleadIdentity\s*\(/],
+];
+for (const [name, callPattern] of knownCalls) {
+  if (callPattern.test(source) && !required.find(([requiredName]) => requiredName === name)) {
+    throw new Error(`V7_RUNTIME_INTEGRITY_${name.toUpperCase()}_UNTRACKED`);
+  }
+}
+
+const syntax = spawnSync(process.execPath, ["--check", file], {
+  encoding: "utf8",
+});
+if (syntax.status !== 0) {
+  throw new Error(`V7_RUNTIME_INTEGRITY_SYNTAX:${syntax.stderr || syntax.stdout}`);
+}
+
+console.log("[AIGUKA] V7 dashboard runtime integrity verified");
