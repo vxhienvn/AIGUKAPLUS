@@ -15,41 +15,13 @@ import { patchLearningUi } from "./learning-ui-patch.js";
 import { patchDashboardUi } from "./dashboard-ui-patch.js";
 import { repairExtraUiHtml } from "./repair-ui.js";
 import { installStableV7Dashboard } from "./v7-dashboard-stable.js";
-import { installAiProviderManager } from "./ai-provider-manager.js";\nimport { installDriveSlideManager } from "./drive-slide-manager.js";`;
+import { installAiProviderManager } from "./ai-provider-manager.js";
+import { installAiContextManagerV2 } from "./ai-context-manager-v2.js";
+import { installDriveSlideManagerV3 } from "./drive-slide-manager-v3.js";`;
 
 if (!source.includes('from "./v7-dashboard-stable.js"')) {
   if (source.includes(importAnchor)) source = source.replace(importAnchor, imports);
   else throw new Error("SERVER_IMPORT_ANCHOR_NOT_FOUND");
-}
-if (!source.includes('from "./drive-slide-manager.js"')) {
-  source = source.replace(
-    'import { installAiProviderManager } from "./ai-provider-manager.js";',
-    'import { installAiProviderManager } from "./ai-provider-manager.js";\nimport { installDriveSlideManager } from "./drive-slide-manager.js";',
-  );
-}
-if (!source.includes('from "./learning-admin-v2.js"')) {
-  source = source.replace(
-    'import { installLearningRoutes } from "./learning-handler.js";',
-    'import { installLearningRoutes } from "./learning-handler.js";\nimport { installLearningAdminV2 } from "./learning-admin-v2.js";',
-  );
-}
-if (!source.includes('from "./reviewed-learning-ui.js"')) {
-  source = source.replace(
-    'import { installLearningAdminV2 } from "./learning-admin-v2.js";',
-    'import { installLearningAdminV2 } from "./learning-admin-v2.js";\nimport { installReviewedLearning } from "./reviewed-learning-ui.js";',
-  );
-}
-if (!source.includes('from "./bot-control-ui.js"')) {
-  source = source.replace(
-    'import { installReviewedLearning } from "./reviewed-learning-ui.js";',
-    'import { installReviewedLearning } from "./reviewed-learning-ui.js";\nimport { installBotControlUi } from "./bot-control-ui.js";',
-  );
-}
-if (!source.includes('from "./meta-facebook-login.js"')) {
-  source = source.replace(
-    'import { installBotControlUi } from "./bot-control-ui.js";',
-    'import { installBotControlUi } from "./bot-control-ui.js";\nimport { installMetaFacebookLogin } from "./meta-facebook-login.js";',
-  );
 }
 
 const routeInstall = `installReportRoutes(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
@@ -60,9 +32,11 @@ installBotControlUi(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC
 installReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 installMetaFacebookLogin(app);
 installAiProviderManager(app);
-installDriveSlideManager(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
+installAiContextManagerV2(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
+installDriveSlideManagerV3(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 app.get("/learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
 app.get("/v8-learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
+app.get("/context-ai",(_req,res)=>res.redirect(302,"/ai-contexts"));
 app.get("/control-center",(_req,res)=>res.redirect(302,"/bot-control"));
 app.get("/v8-control-center",(_req,res)=>res.redirect(302,"/bot-control"));
 pageRoutes.set("/v8-dashboard","aiguka-v8-admin");
@@ -101,8 +75,9 @@ for (const version of [
   "1.1.1-v7-import-pending","1.2.0-v7-stable-dashboard","1.2.1-reviewed-learning-restored",
   "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed",
   "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters","1.3.4-practical-lead-filters",
-  "1.3.5-filter-card-fixed","1.4.0-learning-bot-control-restored"
-]) source = source.replaceAll(version, "1.4.1-learning-data-complete");
+  "1.3.5-filter-card-fixed","1.4.0-learning-bot-control-restored","1.4.1-learning-data-complete",
+  "1.5.0-ai-context-manager"
+]) source = source.replaceAll(version, "1.6.0-drive-context-lead-stable");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Product recognition, Prompt CRUD, BOT controls and conversation sync restored");
+console.log("[AIGUKA] Stable Lead table, Drive V3, AI Context V2 and template exports wired");
