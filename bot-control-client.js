@@ -117,16 +117,61 @@ function featureNames(features) {
   return names;
 }
 
-function updateFeatureGuide() {
-  const features = readFeatures();
+function automaticGuideText(features) {
   const names = featureNames(features);
-  byId("guide-on").textContent = names.length
-    ? "BOT được dùng: " + names.join(", ") + "."
-    : "Chưa có chức năng nào được Admin bật; BOT không gửi nội dung.";
-  const supportParts = ["ưu tiên nhân viên Sale"];
+  const supportParts = ["Ưu tiên nhân viên Sale"];
   if (features.slide_enabled) supportParts.push("gửi slide khi nhận diện đúng nhu cầu");
   if (features.text_enabled) supportParts.push("hỗ trợ trả lời sau thời gian chờ");
-  byId("guide-support").textContent = supportParts.join("; ") + ".";
+  if (features.care_enabled) supportParts.push("chăm sóc lại theo quy tắc Admin");
+  return {
+    on: names.length
+      ? "BOT được dùng: " + names.join(", ") + "."
+      : "Chưa có chức năng nào được Admin bật; BOT không gửi nội dung.",
+    support: supportParts.join("; ") + ".",
+    off: "Không gửi chữ, slide, hình ảnh hoặc tin chăm sóc trong khung giờ này.",
+  };
+}
+
+function customGuideText() {
+  return state?.settings?.support_config?.guide_texts || {};
+}
+
+function updateFeatureGuide() {
+  const features = readFeatures();
+  const automatic = automaticGuideText(features);
+  const custom = customGuideText();
+  byId("guide-on").textContent = String(custom.on || "").trim() || automatic.on;
+  byId("guide-support").textContent = String(custom.support || "").trim() || automatic.support;
+  byId("guide-off").textContent = String(custom.off || "").trim() || automatic.off;
+}
+
+function openGuideEditor() {
+  const automatic = automaticGuideText(readFeatures());
+  const custom = customGuideText();
+  for (const key of ["on", "support", "off"]) {
+    const field = byId("guide-edit-" + key);
+    field.value = String(custom[key] || "");
+    field.placeholder = automatic[key];
+  }
+  byId("guide-editor").classList.add("show");
+  byId("edit-guides").textContent = "Đang sửa hướng dẫn";
+}
+
+function closeGuideEditor() {
+  byId("guide-editor").classList.remove("show");
+  byId("edit-guides").textContent = "Sửa hướng dẫn";
+}
+
+function setAdminPanelHidden(hidden) {
+  byId("intro-layout").classList.toggle("admin-hidden", hidden);
+  byId("toggle-admin").textContent = hidden ? "Hiện cài đặt Admin" : "Ẩn cài đặt Admin";
+  try { localStorage.setItem("aiguka_bot_admin_panel_hidden", hidden ? "1" : "0"); } catch {}
+}
+
+function restoreAdminPanelVisibility() {
+  let hidden = false;
+  try { hidden = localStorage.getItem("aiguka_bot_admin_panel_hidden") === "1"; } catch {}
+  setAdminPanelHidden(hidden);
 }
 
 function renderFeatures() {
@@ -137,6 +182,7 @@ function renderFeatures() {
   byId("feature-slide").checked = Boolean(config.slide_enabled ?? runtime.aiguka_can_send_image ?? false);
   byId("feature-care").checked = Boolean(config.care_enabled ?? runtime.care_enabled ?? false);
   updateFeatureGuide();
+  restoreAdminPanelVisibility();
 }
 
 function renderPages() {
@@ -189,6 +235,27 @@ async function saveFeatures() {
     });
     await loadState();
     setStatus("Đã lưu cài đặt chức năng BOT");
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+async function saveGuides(useAutomatic = false) {
+  setStatus(useAutomatic ? "Đang bật nội dung hướng dẫn tự động…" : "Đang lưu hướng dẫn…");
+  try {
+    const guideTexts = useAutomatic ? {} : {
+      on: byId("guide-edit-on").value.trim(),
+      support: byId("guide-edit-support").value.trim(),
+      off: byId("guide-edit-off").value.trim(),
+    };
+    await api("/bot-control/api/guides", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ guide_texts: guideTexts }),
+    });
+    closeGuideEditor();
+    await loadState();
+    setStatus(useAutomatic ? "Hướng dẫn đang tự cập nhật theo chức năng BOT" : "Đã lưu nội dung hướng dẫn");
   } catch (error) {
     setStatus(error.message, false);
   }
@@ -264,4 +331,9 @@ document.addEventListener("click", (event) => {
 byId("add-window").addEventListener("click", addWindow);
 byId("save-schedule").addEventListener("click", saveSchedule);
 byId("save-features").addEventListener("click", saveFeatures);
+byId("toggle-admin").addEventListener("click", () => setAdminPanelHidden(!byId("intro-layout").classList.contains("admin-hidden")));
+byId("edit-guides").addEventListener("click", openGuideEditor);
+byId("cancel-guides").addEventListener("click", closeGuideEditor);
+byId("save-guides").addEventListener("click", () => saveGuides(false));
+byId("auto-guides").addEventListener("click", () => saveGuides(true));
 loadState();

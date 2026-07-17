@@ -99,6 +99,33 @@ export function installBotControlUi(app, options) {
       res.json({ ok: true, features, settings: savedSettings?.[0] || null, runtime: savedRuntime });
     } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
   });
+  app.post("/bot-control/api/guides", async (req, res) => {
+    try {
+      const body = req.body || {};
+      if (!body.guide_texts || typeof body.guide_texts !== "object" || Array.isArray(body.guide_texts)) {
+        throw new Error("NOI_DUNG_HUONG_DAN_KHONG_HOP_LE");
+      }
+      const clean = (value) => String(value || "").trim().slice(0, 800);
+      const guideTexts = {
+        on: clean(body.guide_texts.on),
+        support: clean(body.guide_texts.support),
+        off: clean(body.guide_texts.off),
+      };
+      const settingsRows = await rest("bot_working_settings?select=*&setting_key=eq.default&limit=1");
+      const settings = settingsRows?.[0] || {};
+      const supportConfig = {
+        ...(settings.support_config || {}),
+        guide_texts: guideTexts,
+        guide_texts_updated_by: "railway_bot_control_admin",
+        guide_texts_updated_at: new Date().toISOString(),
+      };
+      const rows = await rest("bot_working_settings?setting_key=eq.default", {
+        method: "PATCH",
+        body: { support_config: supportConfig, updated_at: new Date().toISOString() },
+      });
+      res.json({ ok: true, guide_texts: guideTexts, settings: rows?.[0] || null });
+    } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
+  });
   app.post("/bot-control/api/schedule", async (req, res) => {
     try {
       const body = req.body || {};
