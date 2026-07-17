@@ -3,39 +3,73 @@ import fs from "node:fs";
 const file = "v7-dashboard-stable.js";
 let source = fs.readFileSync(file, "utf8");
 
-if (source.includes("AIGUKA_META_PRIMARY_LEADS_V1")) {
-  console.log("[AIGUKA] Meta-primary leads already patched");
+if (source.includes("AIGUKA_META_PRIMARY_LEADS_V2")) {
+  console.log("[AIGUKA] Meta-primary Leads V2 already patched");
   process.exitCode = 0;
 } else {
   const leadsStart = source.indexOf("async function leadsPage(req,res) {");
   const leadsEnd = source.indexOf("\n\nexport function installStableV7Dashboard", leadsStart);
   if (leadsStart < 0 || leadsEnd < 0) {
-    throw new Error("V7_META_LEADS_ANCHOR_NOT_FOUND:leadsPage");
+    throw new Error("V7_META_LEADS_V2_ANCHOR_NOT_FOUND:leadsPage");
   }
 
-  const helpers = String.raw`// AIGUKA_META_PRIMARY_LEADS_V1
+  const helpers = String.raw`// AIGUKA_META_PRIMARY_LEADS_V2
 const META_LEADS_SUPABASE_URL = String(process.env.SUPABASE_URL || "https://ezygfpeeqbbirdeazene.supabase.co").replace(/\/$/, "");
 const META_LEADS_SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-async function fetchMetaCustomerLeads(since, until) {
+function shiftLeadDate(value, days) {
+  const date = new Date(String(value) + "T00:00:00Z");
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function leadSenderId(row) {
+  const pageId = String(row.page_id || "");
+  const candidates = [row.sender_id, row.customer_id, row.conversation_id];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (!value) continue;
+    if (/^\d{5,32}$/.test(value)) return value;
+    if (pageId && value.startsWith(pageId + "_")) {
+      const tail = value.slice(pageId.length + 1);
+      if (/^\d{5,32}$/.test(tail)) return tail;
+    }
+    const match = value.match(/(?:^|_)(\d{5,32})$/);
+    if (match?.[1]) return match[1];
+  }
+  return "";
+}
+
+function leadIdentity(row) {
+  const pageId = String(row.page_id || process.env.PANCAKE_PAGE_ID || process.env.META_PAGE_ID || "");
+  const senderId = leadSenderId(row);
+  if (pageId && senderId) return pageId + "|" + senderId;
+  const phone = String(row.phones?.[0] || row.phone || "").replace(/\D/g, "");
+  if (phone) return "phone|" + phone;
+  return "name|" + String(row.name || row.customer_name || "").trim().toLowerCase();
+}
+
+async function fetchMetaConversationStarts(since, until) {
   if (!META_LEADS_SUPABASE_URL || !META_LEADS_SUPABASE_KEY) {
     return { rows: [], error: "Thiếu SUPABASE_SERVICE_ROLE_KEY nên chưa đọc được khách Meta đa Trang" };
   }
-  if (!cache.metaLeads) cache.metaLeads = new Map();
+  if (!cache.metaConversationStarts) cache.metaConversationStarts = new Map();
   const key = String(since) + ":" + String(until);
-  const hit = cache.metaLeads.get(key);
+  const hit = cache.metaConversationStarts.get(key);
   if (hit && Date.now() - hit.time < 60000) return hit.data;
   const result = { rows: [], error: null };
+  const startIso = shiftLeadDate(since, -2) + "T00:00:00Z";
+  const endIso = shiftLeadDate(until, 3) + "T00:00:00Z";
   try {
     for (let offset = 0; offset < 10000; offset += 1000) {
-      const params = new URLSearchParams({
-        select: "*",
-        and: "(report_date.gte." + since + ",report_date.lte." + until + ")",
-        order: "last_message_at.desc",
-        limit: "1000",
-        offset: String(offset),
-      });
-      const response = await fetch(META_LEADS_SUPABASE_URL + "/rest/v1/v8_meta_customer_leads_daily?" + params.toString(), {
+      const params = new URLSearchParams();
+      params.set("select", "*");
+      params.append("conversation_started_at", "gte." + startIso);
+      params.append("conversation_started_at", "lt." + endIso);
+      params.set("order", "conversation_started_at.desc");
+      params.set("limit", "1000");
+      params.set("offset", String(offset));
+      const response = await fetch(META_LEADS_SUPABASE_URL + "/rest/v1/v8_meta_conversation_starts?" + params.toString(), {
         headers: {
           apikey: META_LEADS_SUPABASE_KEY,
           authorization: "Bearer " + META_LEADS_SUPABASE_KEY,
@@ -45,7 +79,7 @@ async function fetchMetaCustomerLeads(since, until) {
       });
       const payload = await response.json().catch(() => []);
       if (!response.ok || !Array.isArray(payload)) {
-        throw new Error(payload?.message || payload?.error || "SUPABASE_META_LEADS_" + response.status);
+        throw new Error(payload?.message || payload?.error || "SUPABASE_META_STARTS_" + response.status);
       }
       result.rows.push(...payload);
       if (payload.length < 1000) break;
@@ -59,91 +93,162 @@ async function fetchMetaCustomerLeads(since, until) {
       return {
         name: row.customer_name || ("Khách ..." + String(row.sender_id || "").slice(-6)),
         customer_id: String(row.sender_id || row.customer_id || ""),
+        sender_id: String(row.sender_id || ""),
         page_id: String(row.page_id || ""),
         page_name: row.page_name || "",
         conversation_id: String(row.conversation_id || row.sender_id || row.customer_id || ""),
         source_type: "Meta Business",
+        conversation_started_at: row.conversation_started_at,
         updated_at: row.last_message_at,
         last_customer_message_at: row.last_message_at,
-        last_message_is_customer: true,
         message_count: Number(row.message_count || 0),
         has_phone: Boolean(row.has_phone || phones.length),
         has_zalo: Boolean(row.has_zalo),
         phones,
         product: row.product_key || "",
-        hot_lead: Boolean(row.hot_lead),
+        hot_lead: Number(row.lead_score || 0) >= 60,
         tags: Array.from(new Set([
           ...(Array.isArray(row.tags) ? row.tags : []),
           ...(row.has_zalo ? ["Zalo"] : []),
           ...(phones.length ? ["Có SĐT"] : []),
         ])),
-        snippet: row.last_snippet || "",
-        ad_ids: row.ad_id ? [String(row.ad_id)] : [],
-        ad_name: row.ad_title || "",
-        dateVerified: true,
+        snippet: row.last_message_text || row.first_message_text || "",
+        adId: String(row.ad_id || ""),
+        adName: row.ad_title || "",
+        postId: String(row.post_id || ""),
+        referralSource: row.referral_source || "",
+        isAdConversation: row.is_ad_conversation === true,
       };
     }),
     error: result.error,
   };
-  cache.metaLeads.set(key, { time: Date.now(), data });
+  cache.metaConversationStarts.set(key, { time: Date.now(), data });
   return data;
 }
 
-function inferLeadAccountsByPage(leads, adsRows) {
-  const byAd = new Map((adsRows || []).map((ad) => [String(ad.adId || ""), ad]));
-  const pageAccounts = new Map();
+async function resolveLeadAdMap(leads, adsRows, accounts) {
+  const map = new Map();
+  const accountMap = new Map((accounts || []).map((account) => [act(account.id), account]));
   for (const ad of adsRows || []) {
-    const postId = String(ad.postId || "");
-    const pageId = postId.includes("_") ? postId.split("_")[0] : "";
-    if (!pageId || !ad.accountId) continue;
-    if (!pageAccounts.has(pageId)) pageAccounts.set(pageId, new Map());
-    pageAccounts.get(pageId).set(String(ad.accountId), ad);
+    map.set(String(ad.adId || ""), { ...ad, accountId: act(ad.accountId), account: accountMap.get(act(ad.accountId)) || null });
   }
-  for (const lead of leads || []) {
-    const direct = byAd.get(String(lead.adId || ""));
-    if (direct) {
-      lead.accountId = direct.accountId;
-      lead.accountName = direct.accountName;
-      lead.campaignName = direct.campaignName;
-      lead.adsetName = direct.adsetName;
-      lead.adName = direct.adName || lead.adName;
-      continue;
-    }
-    const pageId = String(lead.page_id || "");
-    const candidates = pageAccounts.get(pageId);
-    if (!lead.accountId && candidates && candidates.size === 1) {
-      const only = [...candidates.values()][0];
-      lead.accountId = only.accountId;
-      lead.accountName = only.accountName;
-      lead.attributionMethod = "page_account";
+  const unknown = [...new Set((leads || []).map((lead) => String(lead.adId || "")).filter((id) => id && !map.has(id)))];
+  const token = process.env.META_ACCESS_TOKEN || process.env.META_USER_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN || process.env.USER_ACCESS_TOKEN || "";
+  if (token) {
+    for (let index = 0; index < unknown.length; index += 50) {
+      const ids = unknown.slice(index, index + 50);
+      if (!ids.length) continue;
+      try {
+        const fields = "id,name,account_id,campaign{id,name},adset{id,name}";
+        const data = await fetchJson("https://graph.facebook.com/" + GRAPH_VERSION + "/?ids=" + encodeURIComponent(ids.join(",")) + "&fields=" + encodeURIComponent(fields) + "&access_token=" + encodeURIComponent(token));
+        for (const [adId, item] of Object.entries(data || {})) {
+          const accountId = act(item?.account_id || "");
+          const account = accountMap.get(accountId) || null;
+          map.set(String(adId), {
+            adId: String(adId),
+            adName: item?.name || "",
+            accountId,
+            accountName: account?.name || accountId,
+            campaignId: item?.campaign?.id || "",
+            campaignName: item?.campaign?.name || "",
+            adsetId: item?.adset?.id || "",
+            adsetName: item?.adset?.name || "",
+            account,
+          });
+        }
+      } catch {}
     }
   }
-  return leads;
+  return map;
+}
+
+function enrichMetaLeadsWithPancake(metaLeads, pancakeRows) {
+  const pancakeByIdentity = new Map();
+  for (const row of pancakeRows || []) {
+    const key = leadIdentity(row);
+    if (!key || key === "name|") continue;
+    const old = pancakeByIdentity.get(key);
+    if (!old || new Date(row.last_customer_message_at || row.updated_at || 0) > new Date(old.last_customer_message_at || old.updated_at || 0)) {
+      pancakeByIdentity.set(key, row);
+    }
+  }
+  return (metaLeads || []).map((lead) => {
+    const extra = pancakeByIdentity.get(leadIdentity(lead));
+    if (!extra) return lead;
+    const phones = [...new Set([...(lead.phones || []), ...(extra.phones || [])])];
+    const tags = [...new Set([...(lead.tags || []), ...(extra.tags || [])])];
+    return {
+      ...lead,
+      phones,
+      tags,
+      has_phone: lead.has_phone || extra.has_phone || phones.length > 0,
+      has_zalo: lead.has_zalo || extra.has_zalo,
+      product: lead.product || extra.product || "",
+      hot_lead: lead.hot_lead || extra.hot_lead,
+      source_type: "Meta Business + Pancake",
+    };
+  });
+}
+
+function accountLeadDate(lead) {
+  const timezone = lead.accountTimezone || "Asia/Ho_Chi_Minh";
+  return dateKey(lead.conversation_started_at, timezone);
+}
+
+function formatAccountLeadTime(lead) {
+  const timezone = lead.accountTimezone || "Asia/Ho_Chi_Minh";
+  const date = new Date(lead.conversation_started_at);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("vi-VN", { timeZone: timezone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 async function loadUnifiedLeadReport(p, selected = "all") {
-  const [accounts, meta, pancake, metaCustomers] = await Promise.all([
+  const [accounts, meta, pancake, starts] = await Promise.all([
     getAccounts(),
     fetchAds(p.since, p.until, selected),
     fetchPancake(3000),
-    fetchMetaCustomerLeads(p.since, p.until),
+    fetchMetaConversationStarts(p.since, p.until),
   ]);
-  let leads = mapLeads(
-    [...(metaCustomers.rows || []), ...(pancake.rows || [])],
-    meta.rows || [],
-    p.since,
-    p.until,
-  );
-  leads = inferLeadAccountsByPage(leads, meta.rows || []);
-  if (selected !== "all") {
-    leads = leads.filter((row) => act(row.accountId) === selected);
+  const paidCandidates = (starts.rows || []).filter((row) => row.isAdConversation && row.adId);
+  const adMap = await resolveLeadAdMap(paidCandidates, meta.rows || [], accounts);
+  const paid = [];
+  const unresolved = [];
+  const seen = new Set();
+  for (const row of paidCandidates) {
+    const identity = leadIdentity(row);
+    if (!identity || seen.has(identity)) continue;
+    const ad = adMap.get(String(row.adId || ""));
+    if (!ad?.accountId) {
+      unresolved.push(row);
+      continue;
+    }
+    const account = ad.account || (accounts || []).find((item) => act(item.id) === act(ad.accountId)) || null;
+    const lead = {
+      ...row,
+      accountId: act(ad.accountId),
+      accountName: ad.accountName || account?.name || ad.accountId,
+      accountTimezone: account?.timezoneName || account?.timezone_name || "Asia/Ho_Chi_Minh",
+      campaignName: ad.campaignName || "",
+      adsetName: ad.adsetName || "",
+      adName: ad.adName || row.adName || "",
+    };
+    const localDate = accountLeadDate(lead);
+    if (!localDate || localDate < p.since || localDate > p.until) continue;
+    if (selected !== "all" && act(lead.accountId) !== selected) continue;
+    seen.add(identity);
+    paid.push(lead);
   }
-  leads.sort(
-    (left, right) =>
-      new Date(right.last_customer_message_at || right.updated_at || 0) -
-      new Date(left.last_customer_message_at || left.updated_at || 0),
-  );
-  return { accounts, meta, pancake, metaCustomers, leads };
+  const leads = enrichMetaLeadsWithPancake(paid, pancake.rows || []);
+  leads.sort((left, right) => new Date(right.conversation_started_at || 0) - new Date(left.conversation_started_at || 0));
+  return {
+    accounts,
+    meta,
+    pancake,
+    starts,
+    leads,
+    unresolvedCount: unresolved.length,
+    organicCount: (starts.rows || []).filter((row) => !row.isAdConversation).length,
+  };
 }
 
 async function leadsPage(req,res) {
@@ -151,24 +256,24 @@ async function leadsPage(req,res) {
   const selected = String(req.query.account || "all") === "all" ? "all" : act(req.query.account);
   const report = await loadUnifiedLeadReport(p, selected);
   const accounts = report.accounts;
-  const meta = report.meta;
-  const pancake = report.pancake;
-  const metaCustomers = report.metaCustomers;
   const leads = report.leads;
   const rows = leads.map((x,i) => {
     const identity = [x.conversation_id, x.page_name].filter(Boolean).join(" · ");
-    const customer = x.showCustomerName === false ? "" : "<b>" + esc(x.name) + "</b><br><small>" + esc(identity) + "</small>";
+    const customer = "<b>" + esc(x.name) + "</b><br><small>" + esc(identity) + "</small>";
     const contact = esc(x.phones?.join(", ") || "") + (x.has_zalo ? "<br>Zalo" : "");
     const campaign = esc(x.campaignName || "") + "<br><small>" + esc(x.adsetName || "") + "</small>";
     const tags = (x.tags || []).map((tag) => "<span>" + esc(tag) + "</span>").join("");
-    return "<tr><td>" + (i + 1) + "</td><td>" + customer + "</td><td>" + contact + "</td><td>" + esc(x.accountName || "Chưa xác định") + "</td><td>" + campaign + "</td><td>" + esc(x.adName || "") + "</td><td>" + esc(x.product || "") + "</td><td>" + esc(x.source_type || "Meta Business") + "</td><td class=\"tags\">" + tags + "</td><td>" + esc(x.snippet || "") + "</td><td>" + esc(dateKey(x.last_customer_message_at || x.updated_at)) + "</td></tr>";
+    const account = esc(x.accountName || "Chưa xác định") + "<br><small>" + esc(x.accountTimezone || "") + "</small>";
+    return "<tr><td>" + (i + 1) + "</td><td>" + customer + "</td><td>" + contact + "</td><td>" + account + "</td><td>" + campaign + "</td><td>" + esc(x.adName || "") + "</td><td>" + esc(x.product || "") + "</td><td>" + esc(x.source_type || "Meta Business") + "</td><td class=\"tags\">" + tags + "</td><td>" + esc(x.snippet || "") + "</td><td>" + esc(formatAccountLeadTime(x)) + "</td></tr>";
   }).join("");
+  const accountCount = new Set(leads.map((lead) => act(lead.accountId)).filter(Boolean)).size;
   const errors = [
-    ...(meta.errors || []),
-    ...(metaCustomers.error ? [metaCustomers.error] : []),
-    ...(pancake.error ? [pancake.error] : []),
+    ...(report.meta.errors || []),
+    ...(report.starts.error ? [report.starts.error] : []),
+    ...(report.pancake.error ? [report.pancake.error] : []),
   ];
-  const body = "<div class=\"top\"><div><h1>Khách hàng / Lead</h1><div>Meta Business là nguồn chính · Pancake chỉ bổ sung dữ liệu còn thiếu · " + esc(p.since) + " → " + esc(p.until) + "</div></div><a class=\"btn green\" href=\"/export?type=leads&from=" + encodeURIComponent(p.since) + "&to=" + encodeURIComponent(p.until) + "&account=" + encodeURIComponent(selected) + "\">Xuất CSV</a></div>" + filterForm(p, accounts, selected) + (errors.length ? "<div class=\"notice error\">" + errors.map(esc).join("<br>") + "</div>" : "") + "<div class=\"stats\"><div class=\"stat\">Khách đang hiển thị<b>" + leads.length + "</b></div><div class=\"stat\">Tin nhắn Meta<b>" + meta.totalMessages + "</b></div><div class=\"stat\">Tài khoản QC<b>" + accounts.length + "</b></div></div><div class=\"card table\"><table data-meta-messages=\"" + meta.totalMessages + "\" data-customer-count=\"" + leads.length + "\"><thead><tr><th>#</th><th>Khách hàng</th><th>SĐT/Zalo</th><th>Tài khoản QC</th><th>Campaign/Ad set</th><th>Quảng cáo</th><th>Sản phẩm</th><th>Nguồn khách</th><th>Tag Pancake</th><th>Tin cuối</th><th>Ngày</th></tr></thead><tbody>" + (rows || "<tr><td colspan=\"11\">Không có khách phù hợp.</td></tr>") + "</tbody></table></div>";
+  const note = report.unresolvedCount ? "<div class=\"notice\">Có " + report.unresolvedCount + " hội thoại quảng cáo chưa đọc được tài khoản QC; chưa cộng vào số khách để tránh gán sai.</div>" : "";
+  const body = "<div class=\"top\"><div><h1>Khách hàng / Lead</h1><div>Mỗi khách chỉ tính 1 lần · theo múi giờ riêng của từng tài khoản quảng cáo · " + esc(p.since) + " → " + esc(p.until) + "</div></div><a class=\"btn green\" href=\"/export?type=leads&from=" + encodeURIComponent(p.since) + "&to=" + encodeURIComponent(p.until) + "&account=" + encodeURIComponent(selected) + "\">Xuất CSV</a></div>" + filterForm(p, accounts, selected) + (errors.length ? "<div class=\"notice error\">" + errors.map(esc).join("<br>") + "</div>" : "") + note + "<div class=\"stats\"><div class=\"stat\">Khách quảng cáo duy nhất<b>" + leads.length + "</b></div><div class=\"stat\">Tài khoản có khách<b>" + accountCount + "</b></div><div class=\"stat\">Chưa gắn đúng QC<b>" + report.unresolvedCount + "</b></div></div><div class=\"card table\"><table data-meta-messages=\"" + leads.length + "\" data-customer-count=\"" + leads.length + "\"><thead><tr><th>#</th><th>Khách hàng</th><th>SĐT/Zalo</th><th>Tài khoản QC</th><th>Campaign/Ad set</th><th>Quảng cáo</th><th>Sản phẩm</th><th>Nguồn khách</th><th>Tag Pancake</th><th>Tin cuối</th><th>Giờ tài khoản</th></tr></thead><tbody>" + (rows || "<tr><td colspan=\"11\">Không có khách quảng cáo phù hợp.</td></tr>") + "</tbody></table></div>";
   res.type("html").send(layout("Khách hàng Lead", body, "leads"));
 }
 `;
@@ -178,7 +283,7 @@ async function leadsPage(req,res) {
   const exportStart = source.indexOf("  app.get('/export',async(req,res)=>{");
   const exportEnd = source.indexOf("\n  console.log('[AIGUKA]", exportStart);
   if (exportStart < 0 || exportEnd < 0) {
-    throw new Error("V7_META_LEADS_ANCHOR_NOT_FOUND:export");
+    throw new Error("V7_META_LEADS_V2_ANCHOR_NOT_FOUND:export");
   }
 
   const exportRoute = String.raw`  app.get('/export',async(req,res)=>{
@@ -194,6 +299,7 @@ async function leadsPage(req,res) {
         x.phones?.join(' ')||'',
         x.has_zalo?'Zalo':'',
         x.accountName||'',
+        x.accountTimezone||'',
         x.campaignName||'',
         x.adsetName||'',
         x.adName||'',
@@ -201,9 +307,9 @@ async function leadsPage(req,res) {
         x.source_type||'Meta Business',
         (x.tags||[]).join('|'),
         x.snippet||'',
-        dateKey(x.last_customer_message_at||x.updated_at),
+        formatAccountLeadTime(x),
       ]);
-      head=['Khách hàng','SĐT','Zalo','Tài khoản QC','Campaign','Ad set','Quảng cáo','Sản phẩm','Nguồn khách','Tag Pancake','Tin cuối','Ngày'];
+      head=['Khách hàng','SĐT','Zalo','Tài khoản QC','Múi giờ tài khoản','Campaign','Ad set','Quảng cáo','Sản phẩm','Nguồn khách','Tag Pancake','Tin cuối','Giờ tài khoản'];
     }else{
       const d=await fetchDaily(p.since,p.until,selected);
       rows=d.rows.map(x=>[
@@ -223,5 +329,5 @@ async function leadsPage(req,res) {
 
   source = source.slice(0, exportStart) + exportRoute + source.slice(exportEnd);
   fs.writeFileSync(file, source, "utf8");
-  console.log("[AIGUKA] Leads use Meta multi-Page data first; Pancake only enriches gaps");
+  console.log("[AIGUKA] Leads V2: unique Meta conversation starts, direct ad attribution, per-account timezone, Pancake enrichment only");
 }
