@@ -59,6 +59,46 @@ export function installBotControlUi(app, options) {
       res.json({ ok: true, data });
     } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
   });
+  app.post("/bot-control/api/features", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const features = {
+        text_enabled: body.text_enabled === true,
+        slide_enabled: body.slide_enabled === true,
+        care_enabled: body.care_enabled === true,
+        updated_by: "railway_bot_control_admin",
+        updated_at: new Date().toISOString(),
+      };
+      const settingsRows = await rest("bot_working_settings?select=*&setting_key=eq.default&limit=1");
+      const settings = settingsRows?.[0] || {};
+      const supportConfig = { ...(settings.support_config || {}), ...features };
+      const savedSettings = await rest("bot_working_settings?setting_key=eq.default", {
+        method: "PATCH",
+        body: { support_config: supportConfig, updated_at: new Date().toISOString() },
+      });
+
+      const runtimeRows = await rest("v8_config_hub?select=*&key=eq.runtime_mode&scope=eq.global&is_active=eq.true&order=updated_at.desc&limit=1");
+      const runtime = runtimeRows?.[0] || null;
+      let savedRuntime = null;
+      if (runtime) {
+        const value = {
+          ...(runtime.value || {}),
+          aiguka_can_send_text: features.text_enabled,
+          aiguka_can_send_image: features.slide_enabled,
+          aiguka_can_auto_reply: features.text_enabled || features.care_enabled,
+          care_enabled: features.care_enabled,
+          support_slide_only: features.slide_enabled && !features.text_enabled,
+          meta_is_source_of_truth: true,
+        };
+        const rows = await rest(`v8_config_hub?id=eq.${encodeURIComponent(runtime.id)}`, {
+          method: "PATCH",
+          body: { value, updated_at: new Date().toISOString() },
+        });
+        savedRuntime = rows?.[0] || null;
+      }
+      res.json({ ok: true, features, settings: savedSettings?.[0] || null, runtime: savedRuntime });
+    } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
+  });
   app.post("/bot-control/api/schedule", async (req, res) => {
     try {
       const body = req.body || {};

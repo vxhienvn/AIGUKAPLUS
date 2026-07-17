@@ -1,18 +1,267 @@
-let state=null;const MODE_LABEL={OFF:'Tắt hoàn toàn',OBSERVE:'Chỉ quan sát',TEST:'Chạy thử nghiệm',PRODUCTION:'Hoạt động chính thức',LIVE:'Hoạt động chính thức'};const modeLabel=v=>MODE_LABEL[String(v||'OBSERVE').toUpperCase()]||String(v||'Chỉ quan sát');const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function setStatus(text,ok=true){$('status').textContent=text;$('status').className='status'+(ok?'':' bad')}
-async function api(url,options){const r=await fetch(url,options),text=await r.text();let j;try{j=JSON.parse(text)}catch{j={error:text}}if(!r.ok||j.ok===false)throw Error(j.error||j.message||('HTTP '+r.status));return j}
-function normalizeMode(value){const v=String(value||'off').toLowerCase();if(['support','assist','sale_support'].includes(v))return'support';if(['followup','follow_up','care','full','production','auto'].includes(v))return'followup';return'off'}
-function modeHelp(mode){return mode==='support'?'Gửi slide ngay khi nhận diện nhu cầu; BOT hỗ trợ trả lời nếu Sale chưa phản hồi.':mode==='followup'?'Chăm sóc lại khách chưa để số và không phản hồi.':'Không gửi chữ, slide, hình ảnh hoặc tin chăm sóc.'}
-function delayDefault(mode){return mode==='followup'?8:mode==='support'?5:0}
-function delayUnit(mode){return mode==='followup'?'giờ':'phút'}
-function refreshWindow(row){const mode=row.querySelector('.w-mode').value,delay=row.querySelector('.w-delay');row.querySelector('.mode-help').textContent=modeHelp(mode);row.querySelector('.delay-unit').textContent=delayUnit(mode);delay.disabled=mode==='off';if(mode==='off')delay.value=0;else if(!Number(delay.value))delay.value=delayDefault(mode)}
-function windowHtml(w={}){const mode=normalizeMode(w.mode),delay=mode==='followup'?Number(w.followup_hours??w.delay_hours??8):mode==='support'?Number(w.wait_minutes??w.delay_minutes??5):0;return '<div class="schedule-window"><div><label>Tên khoảng</label><input class="w-label" value="'+esc(w.label||w.name||'Khung giờ mới')+'"></div><div><label>Bắt đầu</label><input class="w-start" type="time" value="'+esc(String(w.start||'08:00').slice(0,5))+'"></div><div><label>Kết thúc</label><input class="w-end" type="time" value="'+esc(String(w.end||'12:00').slice(0,5))+'"></div><div><label>Chế độ BOT</label><select class="w-mode" onchange="refreshWindow(this.closest(\'.schedule-window\'))"><option value="support" '+(mode==='support'?'selected':'')+'>Hỗ trợ Sale</option><option value="followup" '+(mode==='followup'?'selected':'')+'>Follow-up chăm sóc</option><option value="off" '+(mode==='off'?'selected':'')+'>Tắt hoàn toàn</option></select><div class="mode-help">'+modeHelp(mode)+'</div></div><div><label>Thời gian chờ (<span class="delay-unit">'+delayUnit(mode)+'</span>)</label><input class="w-delay" type="number" min="0" value="'+delay+'" '+(mode==='off'?'disabled':'')+'></div><div><label>Hoạt động</label><input class="w-enabled" type="checkbox" '+(w.enabled!==false?'checked':'')+'></div><button type="button" onclick="this.closest(\'.schedule-window\').remove()">Xóa</button></div>'}
-function renderWindows(rows){$('schedule-windows').innerHTML='<div class="schedule-head"><span>Tên khoảng</span><span>Bắt đầu</span><span>Kết thúc</span><span>Chế độ BOT</span><span>Thời gian chờ</span><span>Hoạt động</span><span></span></div>'+(rows||[]).map(windowHtml).join('')}
-function addWindow(){$('schedule-windows').insertAdjacentHTML('beforeend',windowHtml({label:'Khung giờ mới',start:'08:00',end:'12:00',mode:'support',enabled:true,wait_minutes:5}))}
-function collectWindows(){return [...document.querySelectorAll('.schedule-window')].map(x=>{const mode=x.querySelector('.w-mode').value,delay=Math.max(0,Number(x.querySelector('.w-delay').value||delayDefault(mode)));return{label:x.querySelector('.w-label').value.trim()||'Không tên',name:x.querySelector('.w-label').value.trim()||'Không tên',start:x.querySelector('.w-start').value,end:x.querySelector('.w-end').value,mode,enabled:x.querySelector('.w-enabled').checked,wait_minutes:mode==='support'?delay:null,delay_minutes:mode==='support'?delay:null,followup_hours:mode==='followup'?delay:null,delay_hours:mode==='followup'?delay:null}})}
-async function loadState(){setStatus('Đang tải điều khiển BOT…');try{state=await api('/bot-control/api/state');const s=state.settings||{},rows=s.reply_windows&&s.reply_windows.length?s.reply_windows:[{label:'Giờ hỗ trợ Sale',start:String(s.work_start||'08:00').slice(0,5),end:String(s.work_end||'22:00').slice(0,5),mode:'support',enabled:true,wait_minutes:Number(s.working_wait_minutes||5)},{label:'Chăm sóc khách chưa để số',start:'22:00',end:'08:00',mode:'followup',enabled:true,followup_hours:8}];renderWindows(rows);$('staff-count').value=s.staff_online_count??0;$('holiday').value=String(!!s.holiday_mode);$('schedule-open').value=String(s.is_open!==false);renderPages();renderPolicy();setStatus('Đã tải trạng thái BOT')}catch(e){setStatus(e.message,false)}}
-function renderPages(){$('pages').innerHTML=(state.pages||[]).map(p=>'<div class="page"><div class="page-head"><div><b>'+esc(p.page_name)+'</b><br><small>'+esc(p.page_id)+'</small><br><span>Thực tế: <b>'+esc(modeLabel(p.policy?.runtime_mode||p.bot_mode))+'</b></span></div><div><select id="mode-'+esc(p.page_id)+'"><option value="OFF" '+(p.bot_mode==='OFF'?'selected':'')+'>Tắt hoàn toàn</option><option value="OBSERVE" '+(p.bot_mode==='OBSERVE'?'selected':'')+'>Chỉ quan sát</option><option value="TEST" '+(p.bot_mode==='TEST'?'selected':'')+'>Chạy thử nghiệm</option><option value="PRODUCTION" '+(['PRODUCTION','LIVE'].includes(p.bot_mode)?'selected':'')+'>Hoạt động chính thức</option></select> <button onclick="savePageMode(\''+esc(p.page_id)+'\')">Lưu chế độ</button></div></div><div class="safe" style="margin-top:8px">Gửi chữ: '+(p.policy?.can_send_text?'Có':'Không')+' · Gửi slide: '+(p.policy?.can_send_image?'Có':'Không')+' · Kết nối nhận tin: '+esc(p.webhook_status||'chưa rõ')+'</div></div>').join('')||'<div>Chưa có Page.</div>'}
-function renderPolicy(){const rows=(state.pages||[]).map(p=>esc(p.page_name)+': '+esc(modeLabel(p.policy?.runtime_mode||p.bot_mode))+' — chữ '+(p.policy?.can_send_text?'BẬT':'TẮT')+', slide '+(p.policy?.can_send_image?'BẬT':'TẮT'));$('policy').innerHTML=rows.join('<br>')||'Chưa có dữ liệu.'}
-async function savePageMode(pageId){const mode=$('mode-'+pageId).value;if(mode==='PRODUCTION'&&!confirm('Bật Hoạt động chính thức cho Trang này?'))return;setStatus('Đang đổi chế độ Trang…');try{const j=await api('/bot-control/api/page-mode',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({page_id:pageId,mode})});if(j.data?.changed===false)throw Error('Không chuyển được chế độ: '+JSON.stringify(j.data.blockers||j.data));await loadState();setStatus('Đã cập nhật chế độ Trang')}catch(e){setStatus(e.message,false)}}
-async function saveSchedule(){setStatus('Đang lưu toàn bộ lịch…');try{const old=state.settings||{},windows=collectWindows();if(!windows.length)throw Error('Cần ít nhất một khoảng thời gian');if(windows.some(x=>!x.start||!x.end))throw Error('Mỗi khoảng phải có giờ bắt đầu và kết thúc');const active=windows.filter(x=>x.enabled&&x.mode!=='off'),support=active.some(x=>x.mode==='support'),followup=active.some(x=>x.mode==='followup');await api('/bot-control/api/schedule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({timezone:old.timezone||'Asia/Ho_Chi_Minh',work_start:windows[0].start,work_end:windows[windows.length-1].end,is_open:$('schedule-open').value==='true',holiday_mode:$('holiday').value==='true',staff_online_count:Number($('staff-count').value||0),working_wait_minutes:Math.min(...windows.filter(x=>x.mode==='support').map(x=>x.wait_minutes||5).concat([5])),outside_wait_minutes:old.outside_wait_minutes||5,admin_pause_minutes:old.admin_pause_minutes||10,customer_wait_minutes:old.customer_wait_minutes||5,reply_windows:windows,working_windows:active,after_hours_windows:windows.filter(x=>x.mode==='off'),bot_mode:'scheduled_ver7',support_wait_minutes:Math.min(...windows.filter(x=>x.mode==='support').map(x=>x.wait_minutes||5).concat([5])),followup_wait_hours:Math.min(...windows.filter(x=>x.mode==='followup').map(x=>x.followup_hours||8).concat([8]))})});await api('/bot-control/api/runtime',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:active.length?'PRODUCTION':'OFF',queue_first:true,aiguka_can_send_text:support||followup,aiguka_can_send_image:support,aiguka_can_auto_reply:active.length>0,aiguka_can_create_sale_task:false,operational_mode:'SCHEDULED_VER7',support_slide_only:false})});await loadState();setStatus('Đã lưu '+windows.length+' khoảng thời gian theo cơ chế Ver7')}catch(e){setStatus(e.message,false)}}
+let state = null;
+
+const PAGE_MODE_LABELS = {
+  OFF: "Tắt hoàn toàn",
+  OBSERVE: "Chỉ quan sát",
+  TEST: "Chạy thử nghiệm",
+  PRODUCTION: "Hoạt động chính thức",
+  LIVE: "Hoạt động chính thức",
+};
+
+const byId = (id) => document.getElementById(id);
+const escapeHtml = (value) => String(value ?? "").replace(
+  /[&<>"']/g,
+  (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
+);
+const pageModeLabel = (value) => PAGE_MODE_LABELS[String(value || "OBSERVE").toUpperCase()] || String(value || "Chỉ quan sát");
+
+function setStatus(text, ok = true) {
+  byId("status").textContent = text;
+  byId("status").className = "status" + (ok ? "" : " bad");
+}
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let json;
+  try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text || "Phản hồi không hợp lệ" }; }
+  if (!response.ok || json.ok === false) throw new Error(json.error || json.message || `HTTP ${response.status}`);
+  return json;
+}
+
+function normalizeScheduleMode(value) {
+  const mode = String(value || "off").toLowerCase();
+  if (["support", "assist", "sale_support"].includes(mode)) return "support";
+  if (["on", "full", "production", "auto", "followup", "follow_up", "care"].includes(mode)) return "on";
+  return "off";
+}
+
+function scheduleModeHelp(mode) {
+  if (mode === "on") return "BOT chạy các chức năng được Admin bật.";
+  if (mode === "support") return "Ưu tiên Sale; BOT hỗ trợ sau thời gian chờ.";
+  return "BOT tắt hoàn toàn trong khung giờ này.";
+}
+
+function refreshWindow(row) {
+  const mode = row.querySelector(".w-mode").value;
+  const delay = row.querySelector(".w-delay");
+  row.querySelector(".mode-help").textContent = scheduleModeHelp(mode);
+  delay.disabled = mode !== "support";
+  if (mode !== "support") delay.value = 0;
+  else if (!Number(delay.value)) delay.value = 5;
+}
+
+function windowHtml(window = {}) {
+  const mode = normalizeScheduleMode(window.mode);
+  const waitMinutes = mode === "support" ? Number(window.wait_minutes ?? window.delay_minutes ?? 5) : 0;
+  return '<div class="schedule-window">'
+    + '<div><label>Tên khoảng</label><input class="w-label" value="' + escapeHtml(window.label || window.name || "Khung giờ mới") + '"></div>'
+    + '<div><label>Bắt đầu</label><input class="w-start" type="time" value="' + escapeHtml(String(window.start || "08:00").slice(0, 5)) + '"></div>'
+    + '<div><label>Kết thúc</label><input class="w-end" type="time" value="' + escapeHtml(String(window.end || "12:00").slice(0, 5)) + '"></div>'
+    + '<div><label>Chế độ BOT</label><select class="w-mode">'
+    + '<option value="on" ' + (mode === "on" ? "selected" : "") + '>ON — Bật BOT</option>'
+    + '<option value="support" ' + (mode === "support" ? "selected" : "") + '>Hỗ trợ Sale</option>'
+    + '<option value="off" ' + (mode === "off" ? "selected" : "") + '>OFF — Tắt BOT</option>'
+    + '</select><div class="mode-help">' + scheduleModeHelp(mode) + '</div></div>'
+    + '<div><label>Chờ hỗ trợ (phút)</label><input class="w-delay" type="number" min="0" value="' + waitMinutes + '" ' + (mode !== "support" ? "disabled" : "") + '></div>'
+    + '<div><label>Hoạt động</label><input class="w-enabled" type="checkbox" ' + (window.enabled !== false ? "checked" : "") + '></div>'
+    + '<button type="button" class="remove-window">Xóa</button></div>';
+}
+
+function renderWindows(rows) {
+  byId("schedule-windows").innerHTML = '<div class="schedule-head"><span>Tên khoảng</span><span>Bắt đầu</span><span>Kết thúc</span><span>Chế độ BOT</span><span>Chờ hỗ trợ</span><span>Hoạt động</span><span></span></div>'
+    + (rows || []).map(windowHtml).join("");
+}
+
+function addWindow() {
+  byId("schedule-windows").insertAdjacentHTML("beforeend", windowHtml({
+    label: "Khung giờ mới",
+    start: "08:00",
+    end: "12:00",
+    mode: "support",
+    enabled: true,
+    wait_minutes: 5,
+  }));
+}
+
+function collectWindows() {
+  return [...document.querySelectorAll(".schedule-window")].map((row) => {
+    const label = row.querySelector(".w-label").value.trim() || "Không tên";
+    const mode = row.querySelector(".w-mode").value;
+    return {
+      label,
+      name: label,
+      start: row.querySelector(".w-start").value,
+      end: row.querySelector(".w-end").value,
+      mode,
+      enabled: row.querySelector(".w-enabled").checked,
+      wait_minutes: mode === "support" ? Math.max(0, Number(row.querySelector(".w-delay").value || 5)) : 0,
+      delay_minutes: mode === "support" ? Math.max(0, Number(row.querySelector(".w-delay").value || 5)) : 0,
+    };
+  });
+}
+
+function readFeatures() {
+  return {
+    text_enabled: byId("feature-text").checked,
+    slide_enabled: byId("feature-slide").checked,
+    care_enabled: byId("feature-care").checked,
+  };
+}
+
+function featureNames(features) {
+  const names = [];
+  if (features.text_enabled) names.push("trả lời tư vấn bằng chữ");
+  if (features.slide_enabled) names.push("gửi slide/hình ảnh");
+  if (features.care_enabled) names.push("chăm sóc lại khách");
+  return names;
+}
+
+function updateFeatureGuide() {
+  const features = readFeatures();
+  const names = featureNames(features);
+  byId("guide-on").textContent = names.length
+    ? "BOT được dùng: " + names.join(", ") + "."
+    : "Chưa có chức năng nào được Admin bật; BOT không gửi nội dung.";
+  const supportParts = ["ưu tiên nhân viên Sale"];
+  if (features.slide_enabled) supportParts.push("gửi slide khi nhận diện đúng nhu cầu");
+  if (features.text_enabled) supportParts.push("hỗ trợ trả lời sau thời gian chờ");
+  byId("guide-support").textContent = supportParts.join("; ") + ".";
+}
+
+function renderFeatures() {
+  const settings = state.settings || {};
+  const runtime = state.runtime?.value || {};
+  const config = settings.support_config || {};
+  byId("feature-text").checked = Boolean(config.text_enabled ?? runtime.aiguka_can_send_text ?? false);
+  byId("feature-slide").checked = Boolean(config.slide_enabled ?? runtime.aiguka_can_send_image ?? false);
+  byId("feature-care").checked = Boolean(config.care_enabled ?? runtime.care_enabled ?? false);
+  updateFeatureGuide();
+}
+
+function renderPages() {
+  byId("pages").innerHTML = (state.pages || []).map((page) => {
+    const current = String(page.bot_mode || "OBSERVE").toUpperCase();
+    return '<div class="page"><div class="page-head"><div><b>' + escapeHtml(page.page_name) + '</b><br><small>' + escapeHtml(page.page_id) + '</small><br><span>Thực tế: <b>' + escapeHtml(pageModeLabel(page.policy?.runtime_mode || current)) + '</b></span></div>'
+      + '<div><select id="mode-' + escapeHtml(page.page_id) + '"><option value="OFF" ' + (current === "OFF" ? "selected" : "") + '>Tắt hoàn toàn</option><option value="OBSERVE" ' + (current === "OBSERVE" ? "selected" : "") + '>Chỉ quan sát</option><option value="TEST" ' + (current === "TEST" ? "selected" : "") + '>Chạy thử nghiệm</option><option value="PRODUCTION" ' + (["PRODUCTION", "LIVE"].includes(current) ? "selected" : "") + '>Hoạt động chính thức</option></select> <button type="button" data-save-page="' + escapeHtml(page.page_id) + '">Lưu chế độ</button></div></div>'
+      + '<div class="safe" style="margin-top:8px">Gửi chữ: ' + (page.policy?.can_send_text ? "Có" : "Không") + ' · Gửi slide: ' + (page.policy?.can_send_image ? "Có" : "Không") + ' · Kết nối nhận tin: ' + escapeHtml(page.webhook_status || "chưa rõ") + '</div></div>';
+  }).join("") || "<div>Chưa có Trang.</div>";
+}
+
+function renderPolicy() {
+  const rows = (state.pages || []).map((page) => (
+    escapeHtml(page.page_name) + ": " + escapeHtml(pageModeLabel(page.policy?.runtime_mode || page.bot_mode))
+    + " — chữ " + (page.policy?.can_send_text ? "BẬT" : "TẮT")
+    + ", slide " + (page.policy?.can_send_image ? "BẬT" : "TẮT")
+  ));
+  byId("policy").innerHTML = rows.join("<br>") || "Chưa có dữ liệu.";
+}
+
+async function loadState() {
+  setStatus("Đang tải điều khiển BOT…");
+  try {
+    state = await api("/bot-control/api/state");
+    const settings = state.settings || {};
+    const rows = settings.reply_windows?.length ? settings.reply_windows : [
+      { label: "Giờ làm việc", start: String(settings.work_start || "08:00").slice(0, 5), end: String(settings.work_end || "22:00").slice(0, 5), mode: "support", enabled: true, wait_minutes: Number(settings.support_wait_minutes || 5) },
+      { label: "Ngoài giờ", start: String(settings.work_end || "22:00").slice(0, 5), end: String(settings.work_start || "08:00").slice(0, 5), mode: "off", enabled: true },
+    ];
+    renderWindows(rows);
+    byId("staff-count").value = settings.staff_online_count ?? 0;
+    byId("holiday").value = String(Boolean(settings.holiday_mode));
+    byId("schedule-open").value = String(settings.is_open !== false);
+    renderFeatures();
+    renderPages();
+    renderPolicy();
+    setStatus("Đã tải trạng thái BOT");
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+async function saveFeatures() {
+  setStatus("Đang lưu chức năng BOT…");
+  try {
+    await api("/bot-control/api/features", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(readFeatures()),
+    });
+    await loadState();
+    setStatus("Đã lưu cài đặt chức năng BOT");
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+async function savePageMode(pageId) {
+  const mode = byId("mode-" + pageId).value;
+  if (mode === "PRODUCTION" && !confirm("Bật Hoạt động chính thức cho Trang này?")) return;
+  setStatus("Đang đổi chế độ Trang…");
+  try {
+    const result = await api("/bot-control/api/page-mode", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ page_id: pageId, mode }),
+    });
+    if (result.data?.changed === false) throw new Error("Không chuyển được chế độ: " + JSON.stringify(result.data.blockers || result.data));
+    await loadState();
+    setStatus("Đã cập nhật chế độ Trang");
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+async function saveSchedule() {
+  setStatus("Đang lưu toàn bộ lịch…");
+  try {
+    const old = state.settings || {};
+    const windows = collectWindows();
+    if (!windows.length) throw new Error("Cần ít nhất một khoảng thời gian");
+    if (windows.some((window) => !window.start || !window.end)) throw new Error("Mỗi khoảng phải có giờ bắt đầu và kết thúc");
+    const active = windows.filter((window) => window.enabled && window.mode !== "off");
+    const supportWaits = windows.filter((window) => window.enabled && window.mode === "support").map((window) => window.wait_minutes || 5);
+    await api("/bot-control/api/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        timezone: old.timezone || "Asia/Ho_Chi_Minh",
+        work_start: windows[0].start,
+        work_end: windows[windows.length - 1].end,
+        is_open: byId("schedule-open").value === "true",
+        holiday_mode: byId("holiday").value === "true",
+        staff_online_count: Number(byId("staff-count").value || 0),
+        working_wait_minutes: supportWaits.length ? Math.min(...supportWaits) : 5,
+        support_wait_minutes: supportWaits.length ? Math.min(...supportWaits) : 5,
+        outside_wait_minutes: old.outside_wait_minutes || 5,
+        admin_pause_minutes: old.admin_pause_minutes || 10,
+        customer_wait_minutes: old.customer_wait_minutes || 5,
+        reply_windows: windows,
+        working_windows: active,
+        after_hours_windows: windows.filter((window) => window.mode === "off"),
+        bot_mode: "scheduled_sale",
+      }),
+    });
+    await loadState();
+    setStatus("Đã lưu " + windows.length + " khoảng thời gian; chức năng Admin không bị thay đổi");
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches(".w-mode")) refreshWindow(event.target.closest(".schedule-window"));
+  if (event.target.matches("#feature-text,#feature-slide,#feature-care")) updateFeatureGuide();
+});
+
+document.addEventListener("click", (event) => {
+  const removeButton = event.target.closest(".remove-window");
+  if (removeButton) removeButton.closest(".schedule-window").remove();
+  const pageButton = event.target.closest("[data-save-page]");
+  if (pageButton) savePageMode(pageButton.dataset.savePage);
+});
+
+byId("add-window").addEventListener("click", addWindow);
+byId("save-schedule").addEventListener("click", saveSchedule);
+byId("save-features").addEventListener("click", saveFeatures);
 loadState();

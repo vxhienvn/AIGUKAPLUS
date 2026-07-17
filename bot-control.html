@@ -1,3 +1,57 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Điều khiển BOT</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#172033;font:14px Arial,sans-serif}.top{background:#0f172a;color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}.top h2{margin:0}.top a{color:#fff}.wrap{max-width:1250px;margin:18px auto;padding:0 14px}.card{background:#fff;border:1px solid #d7dfeb;border-radius:12px;padding:15px;margin-bottom:14px}.card h3{margin-top:0}.field{display:flex;flex-direction:column;gap:5px}.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.field input,.field select{height:39px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}.btn,button{padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer}.primary{background:#2563eb;color:#fff;border-color:#2563eb}.page{border:1px solid #dce3ed;border-radius:10px;padding:12px;margin:8px 0}.page-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.notice{padding:10px;border:1px solid #93c5fd;background:#eff6ff;border-radius:8px}.safe{padding:10px;border:1px solid #abefc6;background:#ecfdf3;border-radius:8px}.status{position:fixed;right:12px;bottom:12px;background:#067647;color:#fff;padding:9px 12px;border-radius:999px}.status.bad{background:#b42318}.muted{color:#667085}.actions{display:flex;gap:7px;flex-wrap:wrap}.schedule-head,.schedule-window{display:grid;grid-template-columns:1.25fr .8fr .8fr 1.6fr 1fr 72px 54px;gap:8px;align-items:center}.schedule-head{padding:8px 10px;background:#eaf0f8;border:1px solid #cbd5e1;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;color:#344054}.schedule-window{padding:7px 10px;margin:0;border:1px solid #d7dfeb;border-top:0;background:#fff}.schedule-window:last-child{border-radius:0 0 8px 8px}.schedule-window input,.schedule-window select{width:100%;height:34px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}.schedule-window label,.mode-help{display:none}.schedule-window .w-enabled{width:22px;height:22px;margin:auto}.schedule-window button{height:34px;padding:5px 8px}.mode-guide{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}.mode-guide div{border:1px solid #d7dfeb;border-radius:9px;padding:10px}.mode-guide b{display:block;margin-bottom:5px}@media(max-width:850px){.form-grid,.schedule-head,.schedule-window,.mode-guide{grid-template-columns:1fr}.schedule-head{display:none}.schedule-window label{display:block}.page-head{align-items:flex-start;flex-direction:column}}
-</style></head><body><div class="top"><div><h2>AIGUKA — Điều khiển BOT & Lịch</h2><div>Mỗi khung giờ chỉ chọn một chế độ làm việc</div></div><a href="/dashboard">Về bảng điều khiển</a></div><main class="wrap"><div class="notice"><b>Cơ chế Ver7:</b> chế độ của khung giờ hiện tại quyết định toàn bộ hành vi BOT. Không cần bật thêm công tắc gửi chữ, gửi slide hay tạo nhiệm vụ Sale.</div><section class="card" style="margin-top:14px"><h3>Lịch làm việc nhiều khung giờ</h3><div class="mode-guide"><div><b>Hỗ trợ Sale</b>Gửi slide khi khách hỏi sản phẩm. Nếu chưa có Sale trả lời và khách chưa cho số, BOT hỗ trợ sau thời gian chờ.</div><div><b>Follow-up chăm sóc</b>Sau thời gian chờ, chăm sóc lại khách chưa để số và không phản hồi.</div><div><b>Tắt hoàn toàn</b>Không gửi chữ, slide, hình ảnh hoặc tin chăm sóc.</div></div><div id="schedule-windows"></div><div class="actions" style="margin:10px 0"><button type="button" onclick="addWindow()">+ Thêm khoảng thời gian</button></div><div class="form-grid"><div class="field"><label>Nhân viên đang trực</label><input id="staff-count" type="number" min="0"></div><div class="field"><label>Ngày lễ</label><select id="holiday"><option value="false">Không</option><option value="true">Có</option></select></div><div class="field"><label>Toàn bộ lịch</label><select id="schedule-open"><option value="true">Bật</option><option value="false">Tắt</option></select></div></div><div style="margin-top:12px"><button class="primary" onclick="saveSchedule()">Lưu toàn bộ lịch</button></div></section><section class="card"><h3>Chế độ từng Trang</h3><div id="pages"></div></section><section class="card"><h3>Trạng thái thực tế</h3><div id="policy" class="safe">Đang tải chính sách chạy thực tế…</div></section></main><div id="status" class="status">Đang kết nối…</div><script src="/bot-control-client.js"></script></body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Điều khiển BOT & Lịch Sale</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#172033;font:14px Arial,sans-serif}.top{background:#0f172a;color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}.top h2{margin:0 0 5px}.top a{color:#fff}.wrap{max-width:1280px;margin:18px auto;padding:0 14px}.card{background:#fff;border:1px solid #d7dfeb;border-radius:12px;padding:15px;margin-bottom:14px}.card h3{margin-top:0}.field{display:flex;flex-direction:column;gap:5px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.field input,.field select{height:39px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}.btn,button{padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer}.primary{background:#2563eb;color:#fff;border-color:#2563eb}.page{border:1px solid #dce3ed;border-radius:10px;padding:12px;margin:8px 0}.page-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.notice{padding:10px;border:1px solid #93c5fd;background:#eff6ff;border-radius:8px}.safe{padding:10px;border:1px solid #abefc6;background:#ecfdf3;border-radius:8px}.status{position:fixed;right:12px;bottom:12px;background:#067647;color:#fff;padding:9px 12px;border-radius:999px;z-index:20}.status.bad{background:#b42318}.muted{color:#667085}.actions{display:flex;gap:7px;flex-wrap:wrap}.schedule-head,.schedule-window{display:grid;grid-template-columns:1.25fr .8fr .8fr 1.45fr 1fr 72px 54px;gap:8px;align-items:center}.schedule-head{padding:8px 10px;background:#eaf0f8;border:1px solid #cbd5e1;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;color:#344054}.schedule-window{padding:7px 10px;margin:0;border:1px solid #d7dfeb;border-top:0;background:#fff}.schedule-window:last-child{border-radius:0 0 8px 8px}.schedule-window input,.schedule-window select{width:100%;height:34px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}.schedule-window label,.mode-help{display:none}.schedule-window .w-enabled{width:22px;height:22px;margin:auto}.schedule-window button{height:34px;padding:5px 8px}.intro-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:14px;margin-bottom:14px}.mode-guide{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;height:100%}.mode-guide article{border:1px solid #d7dfeb;border-radius:9px;padding:12px;background:#fff}.mode-guide b{display:block;margin-bottom:6px;font-size:15px}.mode-on{border-top:3px solid #16a34a!important}.mode-support{border-top:3px solid #2563eb!important}.mode-off{border-top:3px solid #64748b!important}.admin-panel{border:1px solid #f4c97a;background:#fffbeb;border-radius:10px;padding:12px}.admin-panel h4{margin:0 0 4px}.feature-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #f3dfb6}.feature-row:last-of-type{border-bottom:0}.feature-row input{width:20px;height:20px}.admin-badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#7c2d12;color:#fff;font-size:11px;margin-bottom:9px}.feature-summary{font-size:12px;color:#667085;margin-top:5px}.section-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.section-title h3{margin-bottom:4px}@media(max-width:900px){.intro-layout,.form-grid,.schedule-head,.schedule-window,.mode-guide{grid-template-columns:1fr}.schedule-head{display:none}.schedule-window{padding:12px;margin-bottom:8px;border:1px solid #d7dfeb;border-radius:8px}.schedule-window label{display:block;font-size:12px;font-weight:700;margin-bottom:4px}.page-head{align-items:flex-start;flex-direction:column}.top{align-items:flex-start;gap:12px;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div><h2>AIGUKA — Điều khiển BOT & Lịch Sale</h2><div>Sale chỉ chọn Bật, Tắt hoặc Hỗ trợ cho từng khung giờ</div></div>
+    <a href="/dashboard">Về bảng điều khiển</a>
+  </div>
+  <main class="wrap">
+    <div class="notice"><b>Nguyên tắc:</b> lịch Sale quyết định BOT có được chạy trong khung giờ hay không. Các chức năng như trả lời, slide và chăm sóc được quản trị riêng, không tự thay đổi khi Sale sửa lịch.</div>
+
+    <section class="card" style="margin-top:14px">
+      <div class="section-title"><div><h3>Chế độ làm việc và chức năng BOT</h3><div class="muted">Phần bên trái giải thích hành vi hiện tại; phần bên phải là cài đặt chức năng dành cho quản trị viên.</div></div></div>
+      <div class="intro-layout">
+        <div class="mode-guide">
+          <article class="mode-on"><b>ON — Bật BOT</b><div id="guide-on">Đang tải các chức năng được bật…</div></article>
+          <article class="mode-support"><b>Hỗ trợ Sale</b><div id="guide-support">Ưu tiên nhân viên; BOT chỉ hỗ trợ theo các chức năng Admin cho phép.</div></article>
+          <article class="mode-off"><b>OFF — Tắt BOT</b><div>Không gửi chữ, slide, hình ảnh hoặc tin chăm sóc trong khung giờ này.</div></article>
+        </div>
+        <aside class="admin-panel">
+          <span class="admin-badge">DÀNH CHO ADMIN</span>
+          <h4>Cài đặt chức năng BOT</h4>
+          <div class="feature-summary">Bật/tắt độc lập, không phụ thuộc lịch Sale.</div>
+          <label class="feature-row"><span><b>Trả lời tư vấn</b><br><small>BOT được gửi nội dung chữ</small></span><input id="feature-text" type="checkbox"></label>
+          <label class="feature-row"><span><b>Slide / hình ảnh</b><br><small>Gửi khi nhận diện đúng nhu cầu</small></span><input id="feature-slide" type="checkbox"></label>
+          <label class="feature-row"><span><b>Chăm sóc lại</b><br><small>Chạy theo quy tắc chăm sóc của Admin</small></span><input id="feature-care" type="checkbox"></label>
+          <button id="save-features" type="button" class="primary" style="width:100%;margin-top:12px">Lưu chức năng BOT</button>
+        </aside>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Lịch làm việc nhiều khung giờ</h3>
+      <div id="schedule-windows"></div>
+      <div class="actions" style="margin:10px 0"><button id="add-window" type="button">+ Thêm khoảng thời gian</button></div>
+      <div class="form-grid">
+        <div class="field"><label>Nhân viên đang trực</label><input id="staff-count" type="number" min="0"></div>
+        <div class="field"><label>Ngày lễ</label><select id="holiday"><option value="false">Không</option><option value="true">Có</option></select></div>
+        <div class="field"><label>Toàn bộ lịch</label><select id="schedule-open"><option value="true">Bật</option><option value="false">Tắt</option></select></div>
+      </div>
+      <div style="margin-top:12px"><button id="save-schedule" type="button" class="primary">Lưu toàn bộ lịch</button></div>
+    </section>
+
+    <section class="card"><h3>Chế độ từng Trang</h3><div id="pages"></div></section>
+    <section class="card"><h3>Trạng thái thực tế</h3><div id="policy" class="safe">Đang tải chính sách chạy thực tế…</div></section>
+  </main>
+  <div id="status" class="status">Đang kết nối…</div>
+  <script src="/bot-control-client.js"></script>
+</body>
+</html>
