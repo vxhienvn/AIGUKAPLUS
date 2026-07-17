@@ -56,7 +56,7 @@ jobs:
           node patch-v7-pancake-history.js
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
-      - name: Apply full dashboard runtime chain
+      - name: Apply full dashboard runtime chain and smoke-test daily route
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
           const cache = {};
@@ -64,12 +64,12 @@ jobs:
           const act = value => String(value || '');
           const esc = value => String(value || '');
           const csv = value => String(value || '');
-          const dateKey = value => String(value || '');
-          const money = value => String(value || '');
+          const dateKey = value => String(value || '2026-07-17').slice(0,10);
+          const money = value => String(value || '0');
           async function fetchJson(){ return {}; }
           function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
           function filterForm(){ return ''; }
-          function layout(){ return ''; }
+          function layout(_title,body){ return '<html><body>'+body+'</body></html>'; }
           async function getAccounts(){ return []; }
           async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
           async function fetchPancake(){ return { rows: [], error: null }; }
@@ -80,6 +80,7 @@ jobs:
           async function leadsPage(req,res) {}
 
           export function installStableV7Dashboard(app) {
+            app.get('/daily-report',(req,res)=>dailyPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
             app.get('/export',async(req,res)=>{const p=period(req.query,'dashboard'),selected=act(req.query.account)||'all',type=String(req.query.type||'daily');let rows=[];if(type==='leads'){rows=[];}else{rows=[];}const head=[];res.send('');});
             console.log('[AIGUKA] fixture');
           }
@@ -100,5 +101,27 @@ jobs:
           if(fn.includes('META_LEADS_SUPABASE_')) throw new Error('DAILY_LOADER_HAS_EXTERNAL_UNDEFINED_BINDING');
           if(!fn.includes('dailySupabaseUrl')||!fn.includes('dailySupabaseKey')) throw new Error('DAILY_LOADER_LOCAL_CONFIG_MISSING');
           if(!source.includes('Chăm sóc trong ngày')||!source.includes('Khách mới Meta')) throw new Error('DUAL_DAILY_COLUMNS_MISSING');
+          NODE
+          node --input-type=module - <<'NODE'
+          process.env.SUPABASE_SERVICE_ROLE_KEY='';
+          const mod=await import('./v7-dashboard-stable.js?smoke='+Date.now());
+          const routes=new Map();
+          const app={get(path,handler){routes.set(path,handler)}};
+          mod.installStableV7Dashboard(app);
+          const handler=routes.get('/daily-report');
+          if(!handler) throw new Error('DAILY_ROUTE_NOT_REGISTERED');
+          let statusCode=200,body='';
+          const res={
+            status(code){statusCode=code;return this},
+            type(){return this},
+            send(value){body=String(value??'');return this},
+            json(value){body=JSON.stringify(value);return this},
+            redirect(value){body=String(value);return this},
+            setHeader(){return this},
+          };
+          await handler({query:{from:'2026-07-17',to:'2026-07-17',account:'all'}},res);
+          if(statusCode>=500) throw new Error('DAILY_ROUTE_HTTP_'+statusCode+':'+body);
+          if(/\bis not defined\b/.test(body)) throw new Error('DAILY_ROUTE_UNDEFINED_BINDING:'+body);
+          if(!body.includes('Báo cáo ngày')) throw new Error('DAILY_ROUTE_RENDER_MISSING');
           NODE
           rm v7-dashboard-stable.js
