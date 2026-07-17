@@ -1,6 +1,6 @@
 {
   "name": "aiguka-v8-railway-admin",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "type": "module",
   "description": "AIGUKA V8 core with stable V7 reporting and Facebook connection",
@@ -13,6 +13,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "http-proxy-middleware": "^3.0.3",
+    "sharp": "^0.34.3",
     "xlsx": "^0.18.5"
   }
 }
