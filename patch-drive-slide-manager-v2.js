@@ -79,7 +79,7 @@ if (source.includes("AIGUKA_SLIDE_V2")) {
           customer_id: customer.id,
           page_id: customer.page_id,
           sender_id: String(customer.sender_id || ""),
-          label: customer.display_name || `Khách ...\${String(customer.sender_id || "").slice(-6)}`,
+          label: customer.display_name || \`Khách ...\${String(customer.sender_id || "").slice(-6)}\`,
           last_inbound_at: lastInboundAt,
           within_24h: Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 24 * 60 * 60 * 1000,
           age_hours: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 360000) / 10) : null,
