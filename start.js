@@ -34,6 +34,7 @@ await import("./patch-v7-daily-staff-aligned.js");
 await import("./patch-v7-daily-runtime-self-contained.js");
 await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
+await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
 
 await import("./patch-learning-client.js");
