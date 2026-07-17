@@ -1,0 +1,37 @@
+name: Validate runtime patches
+
+on:
+  push:
+    branches:
+      - fix/slide-staff-pancake-20260717
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm install --ignore-scripts
+      - name: Check patch syntax
+        run: |
+          node --check patch-drive-slide-manager-v2.js
+          node --check patch-v7-pancake-history.js
+          node --check patch-v7-pancake-toggle.js
+          node --check patch-v7-daily-staff-history.js
+          node --check start.js
+      - name: Apply and validate slide patch
+        run: |
+          cp drive-slide-manager.js /tmp/drive-slide-manager.js
+          node patch-drive-slide-manager-v2.js
+          node --check drive-slide-manager.js
+          mv /tmp/drive-slide-manager.js drive-slide-manager.js
+      - name: Apply and validate Pancake service patch
+        run: |
+          cp v7-pancake-service.cjs /tmp/v7-pancake-service.cjs
+          node patch-v7-pancake-history.js
+          node --check v7-pancake-service.cjs
+          mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
