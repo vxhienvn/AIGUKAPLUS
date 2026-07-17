@@ -23,11 +23,12 @@ await import("./patch-v7-product-detection.js");
 await import("./patch-v7-navigation.js");
 await import("./patch-v7-pancake-toggle.js");
 await import("./patch-v7-lead-filters.js");
-await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-daily-grouped.js");
 await import("./patch-v7-daily-staff-history.js");
 await import("./patch-v7-daily-layout-sample.js");
 await import("./patch-v7-filter-final.js");
+// Must run after every patch that replaces the dailyPage→leadsPage section.
+await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-learning-client.js");
 await import("./patch-drive-slide-manager-v2.js");
 await import("./patch-server.js");
