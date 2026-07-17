@@ -29,16 +29,30 @@ await import("./patch-v7-daily-staff-history.js");
 await import("./patch-v7-daily-layout-sample.js");
 await import("./patch-v7-filter-final.js");
 
-// Daily page must be finalized before Lead helpers are inserted. Otherwise a
-// daily patch can delete shiftLeadDate/loadUnifiedLeadReport with the range it replaces.
 await import("./patch-v7-daily-staff-aligned.js");
 await import("./patch-v7-daily-runtime-self-contained.js");
 await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
 await import("./patch-v7-pancake-tag-completeness.js");
 await import("./patch-v7-pancake-tag-final.js");
-await import("./patch-v7-null-safety.js");
-await import("./patch-v7-runtime-integrity.js");
+try {
+  await import("./patch-v7-daily-final.js");
+} catch (error) {
+  process.env.AIGUKA_DAILY_PATCH_ERROR = error instanceof Error ? error.message : String(error);
+  console.error("[AIGUKA daily patch diagnostic]", process.env.AIGUKA_DAILY_PATCH_ERROR);
+}
+try {
+  await import("./patch-v7-null-safety.js");
+} catch (error) {
+  process.env.AIGUKA_DAILY_NULL_SAFETY_ERROR = error instanceof Error ? error.message : String(error);
+  console.error("[AIGUKA daily null-safety diagnostic]", process.env.AIGUKA_DAILY_NULL_SAFETY_ERROR);
+}
+try {
+  await import("./patch-v7-runtime-integrity.js");
+} catch (error) {
+  process.env.AIGUKA_DAILY_INTEGRITY_ERROR = error instanceof Error ? error.message : String(error);
+  console.error("[AIGUKA daily integrity diagnostic]", process.env.AIGUKA_DAILY_INTEGRITY_ERROR);
+}
 
 await import("./patch-learning-client.js");
 await import("./patch-drive-slide-manager-v2.js");
@@ -46,4 +60,5 @@ await import("./patch-drive-login-only.js");
 await import("./patch-drive-v7-mode.js");
 await import("./patch-bot-page-mode-save.js");
 await import("./patch-server.js");
+await import("./patch-daily-diagnostic-health.js");
 await import("./server-fixed.js");
