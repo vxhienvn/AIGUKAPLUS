@@ -17,6 +17,7 @@ try {
 
 await import("./patch-v7-pancake-classifier.js");
 await import("./patch-v7-pancake-history.js");
+await import("./patch-v7-pancake-tag-parser.js");
 await import("./materialize-v7-dashboard.js");
 await import("./patch-v7-report-accuracy.js");
 await import("./patch-v7-product-detection.js");
@@ -34,6 +35,7 @@ await import("./patch-v7-daily-staff-aligned.js");
 await import("./patch-v7-daily-runtime-self-contained.js");
 await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
+await import("./patch-v7-pancake-tag-completeness.js");
 await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
 
