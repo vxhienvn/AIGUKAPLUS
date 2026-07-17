@@ -128,7 +128,7 @@ function openFilter(table,th,col,button){
 source = source.slice(0, openStart) + smartOpenFilter + source.slice(setupStart);
 
 const oldSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột như Excel';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
-const newSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const header=clean(th.textContent);const allowed=/^(Tài khoản QC|Tài khoản|Quảng cáo|Campaign \/ Ad set|Sản phẩm|Tag Pancake|Nguồn khách|Nhân viên)$/i;if(!allowed.test(header))return;const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
+const newSetup = "document.querySelectorAll('table').forEach(table=>{table.querySelectorAll('thead th').forEach((th,col)=>{const header=clean(th.textContent).toLowerCase();const allowed=new Set(['tài khoản qc','tài khoản','quảng cáo','campaign / ad set','sản phẩm','tag pancake','nguồn khách','nhân viên']);if(!allowed.has(header))return;const button=document.createElement('button');button.type='button';button.className='col-filter-btn';button.title='Lọc cột';button.textContent='▾';button.onclick=e=>{e.stopPropagation();openFilter(table,th,col,button)};th.appendChild(button)});applyFilters(table)});";
 if (!source.includes(oldSetup)) {
   throw new Error("V7_FILTER_SETUP_ANCHOR_NOT_FOUND");
 }
@@ -167,13 +167,13 @@ function updateLeadHeaderCounts(table){
 function updateVisibleDashboardStats(table){
   if(table.classList.contains('daily-report-table'))return;
   const headers=[...table.querySelectorAll('thead th')].map(th=>clean(th.childNodes[0]?.textContent||th.textContent));
-  const spendIndex=headers.findIndex(x=>/^Chi tiêu$/i.test(x)),messageIndex=headers.findIndex(x=>/^Tin nhắn( Meta)?$/i.test(x)),pancakeIndex=headers.findIndex(x=>/^Hội thoại Pancake$/i.test(x)),contactIndex=headers.findIndex(x=>/^(Liên hệ|SĐT\/Zalo)$/i.test(x)),accountIndex=headers.findIndex(x=>/^(Tài khoản|Tài khoản QC)$/i.test(x));
+  const spendIndex=headers.findIndex(x=>/^Chi tiêu$/i.test(x)),messageIndex=headers.findIndex(x=>/^Tin nhắn( Meta)?$/i.test(x)),pancakeIndex=headers.findIndex(x=>/^Hội thoại Pancake$/i.test(x)),contactIndex=headers.findIndex(x=>x==='Liên hệ'||x==='SĐT/Zalo'),accountIndex=headers.findIndex(x=>/^(Tài khoản|Tài khoản QC)$/i.test(x));
   if(spendIndex<0||messageIndex<0)return;
   const rows=[...(table.tBodies[0]?.rows||[])].filter(r=>r.style.display!=='none'&&!r.classList.contains('daily-total-row'));
   const number=v=>Number(String(v||'').replace(/[^0-9-]/g,''))||0;
   const spend=rows.reduce((s,r)=>s+number(r.cells[spendIndex]?.innerText),0),messages=rows.reduce((s,r)=>s+number(r.cells[messageIndex]?.innerText),0),pancake=pancakeIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[pancakeIndex]?.innerText),0),contacts=contactIndex<0?0:rows.reduce((s,r)=>s+number(r.cells[contactIndex]?.innerText),0);
   const accounts=new Set(rows.map(r=>accountIndex>=0?clean(r.dataset.account||r.cells[accountIndex]?.innerText):'').filter(x=>x&&x!=='(Trống)'));
-  document.querySelectorAll('.stats .stat').forEach(card=>{const label=clean(card.childNodes[0]?.textContent);const value=card.querySelector('b');if(!value)return;if(/^Chi tiêu$/i.test(label))value.textContent=spend.toLocaleString('vi-VN')+' đ';else if(/^Tin nhắn Meta$/i.test(label))value.textContent=String(messages);else if(/^Hội thoại Pancake$/i.test(label)&&pancakeIndex>=0)value.textContent=String(pancake);else if(/^Có SĐT\/Zalo$/i.test(label)&&contactIndex>=0)value.textContent=String(contacts);else if(/^Tài khoản QC$/i.test(label)&&accountIndex>=0)value.textContent=String(accounts.size)});
+  document.querySelectorAll('.stats .stat').forEach(card=>{const label=clean(card.childNodes[0]?.textContent);const value=card.querySelector('b');if(!value)return;if(/^Chi tiêu$/i.test(label))value.textContent=spend.toLocaleString('vi-VN')+' đ';else if(/^Tin nhắn Meta$/i.test(label))value.textContent=String(messages);else if(/^Hội thoại Pancake$/i.test(label)&&pancakeIndex>=0)value.textContent=String(pancake);else if(label==='Có SĐT/Zalo'&&contactIndex>=0)value.textContent=String(contacts);else if(/^Tài khoản QC$/i.test(label)&&accountIndex>=0)value.textContent=String(accounts.size)});
 }
 const applyFiltersBase=applyFilters;
 applyFilters=function(table){applyFiltersBase(table);updateLeadHeaderCounts(table);updateVisibleDashboardStats(table)};
