@@ -24,6 +24,7 @@ await import("./patch-v7-navigation.js");
 await import("./patch-v7-pancake-toggle.js");
 await import("./patch-v7-lead-filters.js");
 await import("./patch-v7-daily-grouped.js");
+await import("./patch-v7-daily-staff-history.js");
 await import("./patch-v7-daily-layout-sample.js");
 await import("./patch-v7-filter-final.js");
 await import("./patch-learning-client.js");
