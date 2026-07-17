@@ -35,6 +35,7 @@ await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
 await import("./patch-v7-pancake-tag-completeness.js");
 await import("./patch-v7-pancake-tag-final.js");
+await import("./patch-v7-daily-final-anchor-fix.js");
 try {
   await import("./patch-v7-daily-final.js");
 } catch (error) {
