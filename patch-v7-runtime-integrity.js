@@ -11,6 +11,7 @@ const required = [
   ["fetchMetaAdReferralEntries", /async\s+function\s+fetchMetaAdReferralEntries\s*\(/g],
   ["resolveLeadAdMap", /async\s+function\s+resolveLeadAdMap\s*\(/g],
   ["loadUnifiedLeadReport", /async\s+function\s+loadUnifiedLeadReport\s*\(/g],
+  ["dashboardPage", /async\s+function\s+dashboardPage\s*\(/g],
   ["dailyPage", /async\s+function\s+dailyPage\s*\(/g],
   ["leadsPage", /async\s+function\s+leadsPage\s*\(/g],
 ];
@@ -22,6 +23,7 @@ for (const [name, pattern] of required) {
   }
 }
 
+const dashboardStart = source.indexOf("async function dashboardPage");
 const dailyLoaderStart = source.indexOf("async function fetchMetaFirstCustomerStarts");
 const dailyPageStart = source.indexOf("async function dailyPage", dailyLoaderStart);
 const referralLoaderStart = source.indexOf("async function fetchMetaAdReferralEntries", dailyPageStart);
@@ -31,7 +33,8 @@ const leadsPageStart = source.indexOf("async function leadsPage", leadLoaderStar
 const installStart = source.indexOf("export function installStableV7Dashboard");
 
 if (
-  dailyLoaderStart < 0 ||
+  dashboardStart < 0 ||
+  dailyLoaderStart <= dashboardStart ||
   dailyPageStart <= dailyLoaderStart ||
   referralLoaderStart <= dailyPageStart ||
   resolveStart <= referralLoaderStart ||
@@ -40,6 +43,11 @@ if (
   installStart <= leadsPageStart
 ) {
   throw new Error("V7_RUNTIME_INTEGRITY_FUNCTION_ORDER_INVALID");
+}
+
+const dashboardBlock = source.slice(dashboardStart, dailyLoaderStart);
+if (dashboardBlock.includes("pancake.error") || dashboardBlock.includes("meta.errors")) {
+  throw new Error("V7_RUNTIME_INTEGRITY_DASHBOARD_UNSAFE_ERROR_READ");
 }
 
 const dailyLoader = source.slice(dailyLoaderStart, dailyPageStart);
@@ -57,6 +65,13 @@ if (
   throw new Error("V7_RUNTIME_INTEGRITY_DAILY_META_VIEW_COLUMN_MISMATCH");
 }
 
+const dailyBlock = source.slice(dailyPageStart, referralLoaderStart);
+for (const unsafe of ["data.errors", "ads.errors", "firstStarts.error", "pancake.error"]) {
+  if (dailyBlock.includes(unsafe)) {
+    throw new Error("V7_RUNTIME_INTEGRITY_DAILY_UNSAFE_ERROR_READ:" + unsafe);
+  }
+}
+
 const referralLoader = source.slice(referralLoaderStart, resolveStart);
 if (
   !referralLoader.includes("/rest/v1/v8_meta_ad_referral_entries?") ||
@@ -70,9 +85,23 @@ const unifiedLoader = source.slice(leadLoaderStart, leadsPageStart);
 if (
   !unifiedLoader.includes("fetchMetaAdReferralEntries(p.since, p.until)") ||
   !unifiedLoader.includes("const [accounts, meta, pancake, referrals]") ||
-  unifiedLoader.includes("fetchMetaConversationStarts(p.since, p.until)")
+  !unifiedLoader.includes("referrals,") ||
+  unifiedLoader.includes("fetchMetaConversationStarts(p.since, p.until)") ||
+  unifiedLoader.includes("starts,")
 ) {
   throw new Error("V7_RUNTIME_INTEGRITY_UNIFIED_LEAD_SOURCE_INVALID");
+}
+
+const leadsPageBlock = source.slice(leadsPageStart, installStart);
+if (
+  !leadsPageBlock.includes("report.referrals?.error") ||
+  leadsPageBlock.includes("report.starts.error") ||
+  leadsPageBlock.includes("report.starts?.error") ||
+  leadsPageBlock.includes("report.referrals.error") ||
+  leadsPageBlock.includes("report.pancake.error") ||
+  leadsPageBlock.includes("report.meta.errors")
+) {
+  throw new Error("V7_RUNTIME_INTEGRITY_LEADS_REPORT_PROPERTY_OR_NULL_SAFETY_INVALID");
 }
 
 const syntax = spawnSync(process.execPath, ["--check", file], {
@@ -112,4 +141,4 @@ if (supabaseKey) {
   }
 }
 
-console.log("[AIGUKA] V7 runtime and live Supabase Meta view-column schema verified");
+console.log("[AIGUKA] V7 runtime, Meta schemas, report properties and null safety verified");
