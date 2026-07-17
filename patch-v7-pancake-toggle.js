@@ -1,11 +1,25 @@
 import fs from "node:fs";
-const file="v7-dashboard-stable.js";
-let source=fs.readFileSync(file,"utf8");
-const css=`.integration-strip{display:flex;gap:14px;align-items:center;justify-content:flex-end;padding:10px 14px;margin-bottom:12px;background:#fff;border:1px solid #d0d5dd;border-radius:10px}.integration-switch{display:flex;align-items:center;gap:7px;font-weight:700}.integration-switch input{width:38px;height:20px;accent-color:#155eef}.integration-source{margin-right:auto;color:#344054;font-size:13px}.integration-source b{color:#155eef}`;
-source=source.replace("</style>",css+"</style>");
-const toolbar=`<div class="integration-strip"><div class="integration-source">Nguồn hội thoại chính: <b>Meta Business</b> · Pancake chỉ bổ sung tag nhân viên</div><label class="integration-switch"><input id="pancake-connection-toggle" type="checkbox"> Kết nối Pancake</label><label class="integration-switch"><input id="pancake-sync-toggle" type="checkbox"> Đồng bộ tag Pancake</label><span id="pancake-toggle-status"></span></div>`;
-source=source.replace('<main class="main">${body}</main>','<main class="main">'+toolbar+'${body}</main>');
-const script=`<script>(function(){const c=document.getElementById("pancake-connection-toggle"),s=document.getElementById("pancake-sync-toggle"),st=document.getElementById("pancake-toggle-status");if(!c||!s)return;async function load(){try{const r=await fetch("/api/integrations/pancake",{cache:"no-store"}),j=await r.json();c.checked=j.data?.connection_enabled!==false;s.checked=j.data?.message_sync_enabled!==false;st.textContent="Đã tải"}catch(e){st.textContent="Lỗi tải trạng thái"}}async function save(input,key){input.disabled=true;st.textContent="Đang lưu…";try{const r=await fetch("/api/integrations/pancake",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({[key]:input.checked})});if(!r.ok)throw Error();st.textContent="Đã lưu";setTimeout(()=>location.reload(),350)}catch(e){st.textContent="Lỗi lưu";input.checked=!input.checked}finally{input.disabled=false}}c.onchange=()=>save(c,"connection_enabled");s.onchange=()=>save(s,"message_sync_enabled");load()}})();</script>`;
-source=source.replace("</body>",script+"</body>");
-fs.writeFileSync(file,source,"utf8");
-console.log("[AIGUKA] Pancake toggles added to all V7 statistics pages; Meta Business labelled primary");
+
+const file = "v7-dashboard-stable.js";
+let source = fs.readFileSync(file, "utf8");
+
+const css = `.pancake-nav-card{margin:12px 0 4px;padding:11px;border:1px solid #334155;border-radius:10px;background:#111c31;color:#dce5f4}.pancake-nav-title{font-weight:800;margin-bottom:5px}.pancake-nav-note{font-size:11px;line-height:1.35;color:#aab6ca;margin-bottom:9px}.pancake-nav-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:700}.pancake-nav-switch input{width:38px;height:20px;accent-color:#22c55e}.pancake-nav-state{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#aab6ca}.pancake-nav-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}.pancake-nav-dot.on{background:#22c55e}.pancake-nav-dot.error{background:#ef4444}`;
+if (!source.includes(".pancake-nav-card")) source = source.replace("</style>", css + "</style>");
+
+const slidesNav = "${nav('/drive-slides','🖼 Mapping & Test Slide','drive-slides')}";
+const panel = `<div class="pancake-nav-card"><div class="pancake-nav-title">Nguồn bổ sung Pancake</div><div class="pancake-nav-note">Meta Business là nguồn chính. Chỉ bật Pancake để bù tag nhân viên và hội thoại Meta chưa kịp đồng bộ.</div><label class="pancake-nav-switch"><span>Bật Pancake</span><input id="pancake-global-toggle" type="checkbox"></label><div class="pancake-nav-state"><span id="pancake-global-dot" class="pancake-nav-dot"></span><span id="pancake-global-status">Đang tải trạng thái…</span></div></div>`;
+if (!source.includes(slidesNav)) throw new Error("V7_PANCAKE_NAV_ANCHOR_NOT_FOUND");
+if (!source.includes("pancake-global-toggle")) source = source.replace(slidesNav, slidesNav + panel);
+
+const script = `<script>(function(){
+const toggle=document.getElementById("pancake-global-toggle"),status=document.getElementById("pancake-global-status"),dot=document.getElementById("pancake-global-dot");
+if(!toggle||!status||!dot)return;
+function show(enabled,text,error){toggle.checked=Boolean(enabled);status.textContent=text;dot.className="pancake-nav-dot"+(error?" error":(enabled?" on":""));}
+async function load(){toggle.disabled=true;try{const r=await fetch("/api/integrations/pancake",{cache:"no-store"}),j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||"Không tải được");const enabled=j.data?.connection_enabled!==false&&j.data?.message_sync_enabled!==false;show(enabled,enabled?"Đang bật toàn hệ thống":"Đang tắt toàn hệ thống",false)}catch(e){show(false,"Lỗi đọc trạng thái",true)}finally{toggle.disabled=false}}
+async function save(){const enabled=toggle.checked;toggle.disabled=true;status.textContent="Đang lưu…";try{const r=await fetch("/api/integrations/pancake",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({connection_enabled:enabled,message_sync_enabled:enabled})}),j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||"Không lưu được");show(enabled,enabled?"Đã bật toàn hệ thống":"Đã tắt toàn hệ thống",false)}catch(e){show(!enabled,"Lỗi lưu trạng thái",true)}finally{toggle.disabled=false}}
+toggle.addEventListener("change",save);load();
+})();</script>`;
+if (!source.includes("pancake-nav-dot\"+(error")) source = source.replace("</body>", script + "</body>");
+
+fs.writeFileSync(file, source, "utf8");
+console.log("[AIGUKA] Persistent Pancake control installed in left navigation");
