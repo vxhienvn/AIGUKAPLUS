@@ -30,6 +30,7 @@ await import("./patch-v7-filter-final.js");
 // Must run after every patch that replaces the dailyPage→leadsPage section.
 await import("./patch-v7-leads-meta-primary.js");
 await import("./patch-v7-leads-referral-source.js");
+await import("./patch-v7-daily-staff-aligned.js");
 await import("./patch-learning-client.js");
 await import("./patch-drive-slide-manager-v2.js");
 await import("./patch-server.js");
