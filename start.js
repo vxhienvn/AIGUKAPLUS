@@ -37,16 +37,12 @@ await import("./patch-v7-pancake-tag-completeness.js");
 await import("./patch-v7-pancake-tag-final.js");
 await import("./patch-v7-daily-final-anchor-fix.js");
 await import("./patch-v7-daily-final.js");
+await import("./patch-v7-lead-table-v3.js");
 await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
 
 await import("./patch-learning-client.js");
-await import("./patch-drive-slide-manager-v2.js");
-await import("./patch-drive-login-only.js");
-await import("./patch-drive-v7-mode.js");
 await import("./patch-bot-page-mode-save.js");
 await import("./patch-ai-context-nav.js");
-await import("./patch-ai-context-server.js");
-await import("./patch-ai-context-openai.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
