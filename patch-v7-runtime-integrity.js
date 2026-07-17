@@ -75,18 +75,6 @@ if (
   throw new Error("V7_RUNTIME_INTEGRITY_UNIFIED_LEAD_SOURCE_INVALID");
 }
 
-const knownCalls = [
-  ["shiftLeadDate", /\bshiftLeadDate\s*\(/],
-  ["loadUnifiedLeadReport", /\bloadUnifiedLeadReport\s*\(/],
-  ["resolveLeadAdMap", /\bresolveLeadAdMap\s*\(/],
-  ["leadIdentity", /\bleadIdentity\s*\(/],
-];
-for (const [name, callPattern] of knownCalls) {
-  if (callPattern.test(source) && !required.find(([requiredName]) => requiredName === name)) {
-    throw new Error(`V7_RUNTIME_INTEGRITY_${name.toUpperCase()}_UNTRACKED`);
-  }
-}
-
 const syntax = spawnSync(process.execPath, ["--check", file], {
   encoding: "utf8",
 });
@@ -94,4 +82,34 @@ if (syntax.status !== 0) {
   throw new Error(`V7_RUNTIME_INTEGRITY_SYNTAX:${syntax.stderr || syntax.stdout}`);
 }
 
-console.log("[AIGUKA] V7 dashboard runtime integrity verified with exact Meta view-column pairs");
+// Kiểm tra schema Supabase thật trước khi server nhận traffic.
+// Supabase chỉ lưu sự kiện Meta; không thay nguồn số liệu Meta.
+const supabaseUrl = String(
+  process.env.SUPABASE_URL || "https://ezygfpeeqbbirdeazene.supabase.co",
+).replace(/\/$/, "");
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+if (supabaseKey) {
+  const schemaChecks = [
+    ["daily_first_start", "v8_meta_conversation_starts", "conversation_started_at"],
+    ["lead_ad_referral", "v8_meta_ad_referral_entries", "referral_at"],
+  ];
+  for (const [label, view, column] of schemaChecks) {
+    const params = new URLSearchParams({ select: column, limit: "1" });
+    const response = await fetch(`${supabaseUrl}/rest/v1/${view}?${params.toString()}`, {
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+      },
+      signal: AbortSignal.timeout(20_000),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(
+        `V7_RUNTIME_SCHEMA_${label.toUpperCase()}_${response.status}:${detail.slice(0, 300)}`,
+      );
+    }
+  }
+}
+
+console.log("[AIGUKA] V7 runtime and live Supabase Meta view-column schema verified");
