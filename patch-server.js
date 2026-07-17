@@ -16,6 +16,7 @@ import { patchDashboardUi } from "./dashboard-ui-patch.js";
 import { repairExtraUiHtml } from "./repair-ui.js";
 import { installStableV7Dashboard } from "./v7-dashboard-stable.js";
 import { installAiProviderManager } from "./ai-provider-manager.js";
+import { installAiContextRestoreRoute } from "./ai-context-restore-route.js";
 import { installAiContextManagerV2 } from "./ai-context-manager-v2.js";
 import { installDriveSlideManagerV3 } from "./drive-slide-manager-v3.js";`;
 
@@ -32,6 +33,7 @@ installBotControlUi(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC
 installReviewedLearning(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY});
 installMetaFacebookLogin(app);
 installAiProviderManager(app);
+installAiContextRestoreRoute(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 installAiContextManagerV2(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 installDriveSlideManagerV3(app,{supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_PUBLIC_KEY,serviceRoleKey:process.env.SUPABASE_SERVICE_ROLE_KEY});
 app.get("/learning",(_req,res)=>res.redirect(302,"/learning-reviewed"));
@@ -76,8 +78,8 @@ for (const version of [
   "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed",
   "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters","1.3.4-practical-lead-filters",
   "1.3.5-filter-card-fixed","1.4.0-learning-bot-control-restored","1.4.1-learning-data-complete",
-  "1.5.0-ai-context-manager","1.6.0-drive-context-lead-stable","1.6.1-lead-v4-drive-recursive"
-]) source = source.replaceAll(version, "1.6.2-context-restore-drive-sync");
+  "1.5.0-ai-context-manager","1.6.0-drive-context-lead-stable","1.6.1-lead-v4-drive-recursive","1.6.2-context-restore-drive-sync"
+]) source = source.replaceAll(version, "1.6.3-all-actions-verified");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Lead V4, Drive sync, AI Context restore and template exports wired");
+console.log("[AIGUKA] Lead, Drive, AI Context actions and template exports wired");
