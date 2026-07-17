@@ -17,46 +17,58 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm install --ignore-scripts
+
       - name: Check patch syntax
         run: |
           node --check patch-drive-slide-manager-v2.js
           node --check patch-v7-pancake-history.js
           node --check patch-v7-pancake-toggle.js
           node --check patch-v7-daily-staff-history.js
-          node --check patch-v7-leads-meta-primary.js
-          node --check patch-v7-leads-referral-source.js
           node --check patch-v7-daily-staff-aligned.js
           node --check patch-v7-daily-runtime-self-contained.js
+          node --check patch-v7-leads-meta-primary.js
+          node --check patch-v7-leads-referral-source.js
+          node --check patch-v7-runtime-integrity.js
           node --check start.js
-      - name: Check runtime patch startup order
+
+      - name: Check destructive patch order
         run: |
           node - <<'NODE'
           const fs=require('fs');
           const source=fs.readFileSync('start.js','utf8');
           const names=[
             'patch-v7-daily-grouped.js',
-            'patch-v7-leads-meta-primary.js',
-            'patch-v7-leads-referral-source.js',
             'patch-v7-daily-staff-aligned.js',
             'patch-v7-daily-runtime-self-contained.js',
+            'patch-v7-leads-meta-primary.js',
+            'patch-v7-leads-referral-source.js',
+            'patch-v7-runtime-integrity.js',
           ];
           const positions=names.map(name=>source.indexOf(name));
           if(positions.some(value=>value<0)) throw new Error('MISSING_RUNTIME_PATCH');
-          for(let i=1;i<positions.length;i++) if(positions[i]<=positions[i-1]) throw new Error('INVALID_RUNTIME_PATCH_ORDER:'+names[i]);
+          for(let i=1;i<positions.length;i++) {
+            if(positions[i]<=positions[i-1]) throw new Error('INVALID_RUNTIME_PATCH_ORDER:'+names[i]);
+          }
           NODE
+
       - name: Apply and validate slide patch
         run: |
           cp drive-slide-manager.js /tmp/drive-slide-manager.js
           node patch-drive-slide-manager-v2.js
           node --check drive-slide-manager.js
           mv /tmp/drive-slide-manager.js drive-slide-manager.js
+
       - name: Apply and validate Pancake service patch
         run: |
           cp v7-pancake-service.cjs /tmp/v7-pancake-service.cjs
           node patch-v7-pancake-history.js
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
-      - name: Apply full dashboard runtime chain and smoke-test daily route
+
+      - name: Build final dashboard and smoke both routes
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          SUPABASE_URL: https://example.supabase.co
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
           const cache = {};
@@ -81,47 +93,55 @@ jobs:
 
           export function installStableV7Dashboard(app) {
             app.get('/daily-report',(req,res)=>dailyPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
+            app.get('/leads',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
             app.get('/export',async(req,res)=>{const p=period(req.query,'dashboard'),selected=act(req.query.account)||'all',type=String(req.query.type||'daily');let rows=[];if(type==='leads'){rows=[];}else{rows=[];}const head=[];res.send('');});
             console.log('[AIGUKA] fixture');
           }
           EOF
+
           node patch-v7-daily-grouped.js
-          node patch-v7-leads-meta-primary.js
-          node patch-v7-leads-referral-source.js
           node patch-v7-daily-staff-aligned.js
           node patch-v7-daily-runtime-self-contained.js
+          node patch-v7-leads-meta-primary.js
+          node patch-v7-leads-referral-source.js
+          node patch-v7-runtime-integrity.js
           node --check v7-dashboard-stable.js
-          node - <<'NODE'
-          const fs=require('fs');
-          const source=fs.readFileSync('v7-dashboard-stable.js','utf8');
-          const start=source.indexOf('async function fetchMetaFirstCustomerStarts');
-          const end=source.indexOf('async function dailyPage',start);
-          if(start<0||end<0) throw new Error('DAILY_META_FIRST_LOADER_MISSING');
-          const fn=source.slice(start,end);
-          if(fn.includes('META_LEADS_SUPABASE_')) throw new Error('DAILY_LOADER_HAS_EXTERNAL_UNDEFINED_BINDING');
-          if(!fn.includes('dailySupabaseUrl')||!fn.includes('dailySupabaseKey')) throw new Error('DAILY_LOADER_LOCAL_CONFIG_MISSING');
-          if(!source.includes('Chăm sóc trong ngày')||!source.includes('Khách mới Meta')) throw new Error('DUAL_DAILY_COLUMNS_MISSING');
-          NODE
+
           node --input-type=module - <<'NODE'
-          process.env.SUPABASE_SERVICE_ROLE_KEY='';
+          globalThis.fetch=async()=>({
+            ok:true,
+            status:200,
+            async json(){return []},
+            async text(){return '[]'},
+          });
           const mod=await import('./v7-dashboard-stable.js?smoke='+Date.now());
           const routes=new Map();
           const app={get(path,handler){routes.set(path,handler)}};
           mod.installStableV7Dashboard(app);
-          const handler=routes.get('/daily-report');
-          if(!handler) throw new Error('DAILY_ROUTE_NOT_REGISTERED');
-          let statusCode=200,body='';
-          const res={
-            status(code){statusCode=code;return this},
-            type(){return this},
-            send(value){body=String(value??'');return this},
-            json(value){body=JSON.stringify(value);return this},
-            redirect(value){body=String(value);return this},
-            setHeader(){return this},
-          };
-          await handler({query:{from:'2026-07-17',to:'2026-07-17',account:'all'}},res);
-          if(statusCode>=500) throw new Error('DAILY_ROUTE_HTTP_'+statusCode+':'+body);
-          if(/\bis not defined\b/.test(body)) throw new Error('DAILY_ROUTE_UNDEFINED_BINDING:'+body);
-          if(!body.includes('Báo cáo ngày')) throw new Error('DAILY_ROUTE_RENDER_MISSING');
+
+          async function run(path){
+            const handler=routes.get(path);
+            if(!handler) throw new Error('ROUTE_NOT_REGISTERED:'+path);
+            let statusCode=200,body='';
+            const res={
+              status(code){statusCode=code;return this},
+              type(){return this},
+              send(value){body=String(value??'');return this},
+              json(value){body=JSON.stringify(value);return this},
+              redirect(value){body=String(value);return this},
+              setHeader(){return this},
+            };
+            await handler({query:{from:'2026-07-17',to:'2026-07-17',account:'all'}},res);
+            if(statusCode>=500) throw new Error('ROUTE_HTTP_'+statusCode+':'+path+':'+body);
+            if(/\bis not defined\b/.test(body)) throw new Error('ROUTE_UNDEFINED_BINDING:'+path+':'+body);
+            return body;
+          }
+
+          const daily=await run('/daily-report');
+          const leads=await run('/leads');
+          if(!daily.includes('Báo cáo ngày')) throw new Error('DAILY_ROUTE_RENDER_MISSING');
+          if(!daily.includes('Chăm sóc trong ngày')||!daily.includes('Khách mới Meta')) throw new Error('DUAL_DAILY_COLUMNS_MISSING');
+          if(!leads.includes('Khách hàng / Lead')) throw new Error('LEADS_ROUTE_RENDER_MISSING');
           NODE
+
           rm v7-dashboard-stable.js
