@@ -31,8 +31,13 @@ const newClassifier = `function pancakeClassifyProduct(text = "") {
     if (has("nhà bếp", "nha bep", "thiết bị bếp", "thiet bi bep", "bếp", "bep")) return "Thiết bị nhà bếp";
     return "Khác";
 }`;
-if (!source.includes(oldClassifier)) throw new Error("PANCAKE_CLASSIFIER_ANCHOR_NOT_FOUND");
-source = source.replace(oldClassifier, newClassifier);
+let changed = false;
+if (source.includes(oldClassifier)) {
+    source = source.replace(oldClassifier, newClassifier);
+    changed = true;
+} else if (!source.includes(newClassifier)) {
+    throw new Error("PANCAKE_CLASSIFIER_ANCHOR_NOT_FOUND");
+}
 const oldProduct = "    const product = pancakeClassifyProduct(snippet);";
 const newProduct = `    const productSources = [
         snippet,
@@ -44,7 +49,13 @@ const newProduct = `    const productSources = [
         tagText
     ].filter(Boolean).join(" ");
     const product = pancakeClassifyProduct(productSources);`;
-if (!source.includes(oldProduct)) throw new Error("PANCAKE_PRODUCT_SOURCE_ANCHOR_NOT_FOUND");
-source = source.replace(oldProduct, newProduct);
-fs.writeFileSync(file, source, "utf8");
-console.log("[AIGUKA] Pancake product classifier now uses message, ad, campaign and tags");
+if (source.includes(oldProduct)) {
+    source = source.replace(oldProduct, newProduct);
+    changed = true;
+} else if (!source.includes("    const productSources = [")) {
+    throw new Error("PANCAKE_PRODUCT_SOURCE_ANCHOR_NOT_FOUND");
+}
+if (changed) fs.writeFileSync(file, source, "utf8");
+console.log(changed
+    ? "[AIGUKA] Pancake product classifier now uses message, ad, campaign and tags"
+    : "[AIGUKA] Pancake product classifier already installed");
