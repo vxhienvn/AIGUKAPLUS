@@ -80,8 +80,8 @@ for (const version of [
   "1.2.2-reviewed-learning-startup-fix","1.3.0-facebook-login","1.3.1-facebook-callback-fixed",
   "1.3.2-v7-all-account-filter-fixed","1.3.3-card-and-column-filters","1.3.4-practical-lead-filters",
   "1.3.5-filter-card-fixed","1.4.0-learning-bot-control-restored","1.4.1-learning-data-complete",
-  "1.5.0-ai-context-manager","1.6.0-drive-context-lead-stable","1.6.1-lead-v4-drive-recursive","1.6.2-context-restore-drive-sync","1.6.3-all-actions-verified","1.6.4-aiguka-context-center"
-]) source = source.replaceAll(version, "1.6.5-drive-v4-meta-messaging");
+  "1.5.0-ai-context-manager","1.6.0-drive-context-lead-stable","1.6.1-lead-v4-drive-recursive","1.6.2-context-restore-drive-sync","1.6.3-all-actions-verified","1.6.4-aiguka-context-center","1.6.5-drive-v4-meta-messaging"
+]) source = source.replaceAll(version, "1.6.6-valid-meta-scopes");
 
 fs.writeFileSync(file, source);
-console.log("[AIGUKA] Drive V4, folder picker and Meta messaging preflight installed");
+console.log("[AIGUKA] Valid Meta Messenger scopes installed");
