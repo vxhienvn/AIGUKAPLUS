@@ -47,6 +47,7 @@ await import("./patch-learning-client.js");
 await import("./patch-bot-page-mode-save.js");
 await import("./patch-bot-clock-24h.js");
 await import("./patch-ai-context-nav.js");
+await import("./patch-ai-context-card-selection.js");
 await import("./patch-ai-context-center-validation.js");
 await import("./patch-meta-pages-messaging-scope.js");
 await import("./patch-drive-v4-key-compat.js");
