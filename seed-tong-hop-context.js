@@ -26,7 +26,9 @@ async function rest(path, init = {}) {
 
 async function seed() {
   if (!supabaseUrl || !key) throw new Error("SUPABASE_NOT_CONFIGURED");
-  const content = fs.readFileSync(new URL("./contexts/tong-hop.md", import.meta.url), "utf8").trim();
+  const baseContext = fs.readFileSync(new URL("./contexts/tong-hop.md", import.meta.url), "utf8").trim();
+  const strictOverrides = fs.readFileSync(new URL("./contexts/tong-hop-overrides.md", import.meta.url), "utf8").trim();
+  const content = `${baseContext}\n\n${strictOverrides}`;
   const seedHash = crypto.createHash("sha256").update(content).digest("hex");
   const existing = (await rest("v8_ai_contexts?context_key=eq.tong_hop_aiguka_aicake&select=*&limit=1"))?.[0] || null;
 
@@ -39,10 +41,10 @@ async function seed() {
   const metadata = {
     ...(existing?.metadata || {}),
     seed_hash: seedHash,
-    seed_version: "2026-07-18.1",
+    seed_version: "2026-07-18.2",
     test_only_until_approved: true,
     pending_page_assignment: true,
-    source_file: "contexts/tong-hop.md",
+    source_file: "contexts/tong-hop.md + contexts/tong-hop-overrides.md",
     merged_sources: ["AIcake customer-care context", "AIGUKA safety/runtime", "AIGUKA prompt inventory"],
     automation_rules_kept_outside_context: true,
   };
@@ -80,7 +82,7 @@ async function seed() {
       usage_mode: "OFF",
       priority: 5,
       is_active: true,
-      change_note: "Tạo ngữ cảnh tối ưu kết hợp AIcake và AIGUKA; để OFF chờ gắn Page test riêng",
+      change_note: "Siết bản test: một câu hỏi cho sản phẩm mơ hồ, không kéo tiếp tin xác nhận ngắn, không liệt kê giả định giá",
       metadata,
       created_by: "seed_tong_hop_context",
     },
