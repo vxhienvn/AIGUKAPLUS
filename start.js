@@ -51,6 +51,7 @@ await import("./patch-ai-context-center-validation.js");
 await import("./patch-meta-pages-messaging-scope.js");
 await import("./patch-drive-v4-key-compat.js");
 await import("./patch-drive-v4-api-key-folder-action.js");
+await import("./patch-drive-folder-tree-hierarchy.js");
 await import("./patch-slide-generic-carousel.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
