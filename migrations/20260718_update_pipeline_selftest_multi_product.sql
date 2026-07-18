@@ -15,8 +15,8 @@ begin
 
   v_definition:=replace(
     v_definition,
-    "rp.action_type='clarify_multiple_products'",
-    "rp.action_type in ('capture_multi_product_contact','handoff_multi_product')"
+    $old$rp.action_type='clarify_multiple_products'$old$,
+    $new$rp.action_type in ('capture_multi_product_contact','handoff_multi_product')$new$
   );
 
   execute v_definition;
