@@ -58,4 +58,5 @@ await import("./patch-slide-generic-carousel.js");
 await import("./seed-tong-hop-context.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
+await import("./patch-outbound-human-takeover.js");
 await import("./outbound-worker.js");
