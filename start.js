@@ -49,5 +49,6 @@ await import("./patch-bot-clock-24h.js");
 await import("./patch-ai-context-nav.js");
 await import("./patch-ai-context-center-validation.js");
 await import("./patch-meta-pages-messaging-scope.js");
+await import("./patch-drive-v4-key-compat.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
