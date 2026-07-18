@@ -27,6 +27,11 @@ if (source.includes(marker)) {
     'row.dataset.customerKey||row.dataset.customer||row.cells[customerIndex]?.innerText',
   );
 
+  const headerAnchor = `<thead><tr><th>#</th><th>Khách hàng</th><th>SĐT/Zalo</th><th>Tài khoản QC</th>`;
+  const headerReplacement = `<thead><tr><th>#</th><th>Khách hàng <span class="lead-head-count customers">Khách '+ordered.length+'</span></th><th>SĐT/Zalo <span class="lead-head-count contacts">Có '+contactCount+'</span></th><th>Tài khoản QC</th>`;
+  if (!source.includes(headerAnchor)) throw new Error("LEAD_CONTACT_HEADER_COUNTER_ANCHOR_NOT_FOUND");
+  source = source.replace(headerAnchor, headerReplacement);
+
   const css = String.raw`
 /* AIGUKA_LEAD_CONTACT_UI_V2 */
 .lead-head-count{display:inline-flex;align-items:center;justify-content:center;height:21px;margin-left:6px;padding:0 8px;border-radius:999px;color:#fff;font:700 11px Arial,sans-serif;vertical-align:middle;white-space:nowrap;box-shadow:0 1px 2px #0002}
@@ -39,7 +44,7 @@ if (source.includes(marker)) {
   source = source.slice(0, styleEnd) + css + source.slice(styleEnd);
 
   const script = String.raw`<script id="aiguka-lead-contact-ui-v2">(function(){
-    const norm=v=>String(v||'').replace(/\s+/g,' ').trim().toLowerCase();
+    const norm=v=>String(v||'').split(String.fromCharCode(10)).join(' ').trim().toLowerCase();
     const contactState=v=>{const text=String(v||'').trim();return text&&(/[0-9]{8,}/.test(text)||/zalo/i.test(text))?'Có SĐT/Zalo':'Không có'};
     let queued=false;
     function ensureBadge(th,type,title){
