@@ -178,7 +178,7 @@ function renderProducts() {
     const countDetail = live.available ? `<div class="small muted">Drive: ${live.images} · Bot đã đồng bộ: ${syncedCount}</div>` : `<div class="small muted">${syncedCount} ảnh Bot đã đồng bộ</div>`;
     const action = mapping._catalog_only
       ? `<button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Tạo Mapping</button>`
-      : `<div class="row-actions"><button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Sửa</button><button class="primary" onclick='syncSlideMapping(${JSON.stringify(String(mapping.id))})'>Đồng bộ ngay</button></div>`;
+      : `<button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Sửa</button>`;
     tr.innerHTML = `<td><b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${ids.length ? ids.map(id => { const folder = state.folders.find(row => String(row.folder_id) === String(id)); const total = Number(folder?.images ?? folder?.total_images ?? folder?.direct_images ?? 0); const direct = Number(folder?.direct_images ?? total); return `<div>📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${total} ảnh tổng · ${direct} trực tiếp)</span></div>`; }).join('') : '<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${shownCount}</b>${shownCount ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}${countDetail}</td><td>${syncStatusHtml(mapping, syncedCount)}</td><td>${action}</td>`;
     body.appendChild(tr);
   }
@@ -365,21 +365,73 @@ async function saveSlideMapping(event) {
   }
 }
 
-async function syncSlideMapping(mappingId) {
-  busy(true);
-  try {
-    const result = await api('/api/slide-manager/drive/sync', {
-      method: 'POST',
-      body: JSON.stringify({ mapping_id: mappingId })
-    });
-    await loadAll(false);
-    status(`Đã quét ${result.folders_scanned || 0} thư mục và đồng bộ ${result.synced || 0} ảnh cho Bot.`);
-  } catch (error) {
-    await loadAll(false).catch(() => {});
-    status(`Đồng bộ Drive lỗi: ${error.message}`, true);
-  } finally {
-    busy(false);
+function syncAllUi(snapshot = {}) {
+  const button = $('syncAllProducts');
+  const detail = $('syncAllProductsStatus');
+  const running = Boolean(snapshot.running);
+  const total = Number(snapshot.total || 0);
+  const completed = Number(snapshot.completed || 0);
+  if (button) {
+    button.disabled = running;
+    button.textContent = running
+      ? (total ? `Đang đồng bộ ${completed}/${total}` : 'Đang chuẩn bị...')
+      : 'Đồng bộ tất cả';
   }
+  if (!detail) return;
+  if (running) {
+    detail.textContent = total
+      ? `Đang quét tuần tự ${completed}/${total} mapping; đã đồng bộ ${Number(snapshot.images_synced || 0)} ảnh.`
+      : 'Đang kiểm tra các mapping cần đồng bộ...';
+  } else if (snapshot.finished_at) {
+    const errors = Array.isArray(snapshot.errors) ? snapshot.errors.length : 0;
+    detail.textContent = total
+      ? `Hoàn tất ${Number(snapshot.mappings_synced || 0)}/${total} mapping, ${Number(snapshot.images_synced || 0)} ảnh${errors ? `, ${errors} lỗi` : ''}.`
+      : `Không cần quét lại; ${Number(snapshot.skipped || 0)} mapping vẫn còn mới.`;
+  }
+}
+
+async function syncAllSlideMappings(force = false) {
+  if (state.syncAllRunning) return;
+  state.syncAllRunning = true;
+  const pollToken = ++state.syncAllPollToken;
+  let snapshot = { running: true, total: 0, completed: 0, images_synced: 0 };
+  syncAllUi(snapshot);
+  try {
+    snapshot = await api('/api/slide-manager/drive/sync-all', {
+      method: 'POST',
+      body: JSON.stringify({ force: Boolean(force), stale_after_minutes: 15 })
+    });
+    syncAllUi(snapshot);
+    while (snapshot.running && pollToken === state.syncAllPollToken) {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      snapshot = await api('/api/slide-manager/drive/sync-all/status');
+      syncAllUi(snapshot);
+    }
+    if (pollToken !== state.syncAllPollToken) return;
+    const errors = Array.isArray(snapshot.errors) ? snapshot.errors.length : 0;
+    await loadAll(false);
+    if (errors) {
+      status(`Đồng bộ hoàn tất nhưng có ${errors} mapping lỗi. Xem trạng thái từng dòng để xử lý.`, true);
+    } else if (Number(snapshot.mappings_synced || 0) > 0) {
+      status(`Đã tự động đồng bộ ${snapshot.mappings_synced} mapping và ${snapshot.images_synced || 0} ảnh từ Drive.`);
+    } else if (force) {
+      status('Không có mapping Drive hợp lệ cần đồng bộ.', true);
+    }
+  } catch (error) {
+    syncAllUi({ running: false });
+    status(`Đồng bộ tất cả lỗi: ${error.message}`, true);
+  } finally {
+    if (pollToken === state.syncAllPollToken) {
+      state.syncAllRunning = false;
+      syncAllUi({ ...snapshot, running: false });
+    }
+  }
+}
+
+function maybeAutoSyncAllSlideMappings() {
+  if (state.productAutoSyncStarted) return;
+  state.productAutoSyncStarted = true;
+  syncAllSlideMappings(false);
 }
 
 async function saveRuntime(pageId) {
