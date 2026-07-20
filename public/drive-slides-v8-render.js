@@ -8,7 +8,7 @@ function mappingFolderIds(mapping) {
 function statusDotHtml(value, customLabel = '') {
   const statusValue = String(value || '').trim().toUpperCase();
   const active = new Set(['ACTIVE', 'SUCCESS', 'CONNECTED', 'CATALOG']);
-  const waiting = new Set(['PAUSED', 'AD_PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'REQUESTED', 'IDLE', 'PENDING_BILLING_INFO', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE']);
+  const waiting = new Set(['PAUSED', 'AD_PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'REQUESTED', 'IDLE', 'PENDING_BILLING_INFO', 'ACCOUNT_NO_DELIVERY', 'DELIVERY_UNVERIFIED', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE']);
   const stopped = new Set(['OFF', 'DISABLED', 'DISAPPROVED', 'WITH_ISSUES', 'ERROR', 'FAILED', 'DELETED', 'ARCHIVED', 'ACCOUNT_DISABLED', 'ACCOUNT_UNSETTLED', 'ACCOUNT_CLOSED', 'ACCOUNT_INACTIVE']);
   const tone = active.has(statusValue) ? 'live' : (waiting.has(statusValue) ? 'waiting' : (stopped.has(statusValue) ? 'stopped' : 'unknown'));
   const labels = {
@@ -36,6 +36,8 @@ function statusDotHtml(value, customLabel = '') {
     ACCOUNT_UNSETTLED: 'Tài khoản quảng cáo chưa thanh toán',
     ACCOUNT_CLOSED: 'Tài khoản quảng cáo đã đóng',
     ACCOUNT_INACTIVE: 'Tài khoản quảng cáo không hoạt động',
+    ACCOUNT_NO_DELIVERY: 'Tài khoản đang bật nhưng hôm nay chưa có phân phối và chi tiêu',
+    DELIVERY_UNVERIFIED: 'Chưa xác minh được phân phối và chi tiêu hôm nay',
     ACCOUNT_PENDING_RISK_REVIEW: 'Tài khoản quảng cáo đang chờ kiểm tra rủi ro',
     ACCOUNT_PENDING_SETTLEMENT: 'Tài khoản quảng cáo đang chờ thanh toán',
     ACCOUNT_IN_GRACE_PERIOD: 'Tài khoản quảng cáo đang trong thời gian gia hạn',
@@ -52,7 +54,7 @@ function statusDotHtml(value, customLabel = '') {
 function statusRank(value) {
   const statusValue = String(value || '').trim().toUpperCase();
   if (statusValue === 'ACTIVE') return 0;
-  if (['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE'].includes(statusValue)) return 1;
+  if (['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'ACCOUNT_NO_DELIVERY', 'DELIVERY_UNVERIFIED', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE'].includes(statusValue)) return 1;
   if (['PAUSED', 'AD_PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_BILLING_INFO'].includes(statusValue)) return 2;
   if (['WITH_ISSUES', 'DISAPPROVED', 'ERROR', 'FAILED', 'OFF', 'DISABLED', 'DELETED', 'ARCHIVED', 'ACCOUNT_DISABLED', 'ACCOUNT_UNSETTLED', 'ACCOUNT_CLOSED', 'ACCOUNT_INACTIVE'].includes(statusValue)) return 3;
   return 4;
@@ -128,7 +130,8 @@ function currentRows() {
     (!accountId || String(row.ad_account_id || row.mapping?.ad_account_id || '') === accountId) &&
     (metaState === 'all' ||
       (metaState === 'active' && isActiveMetaAd(row)) ||
-      (metaState === 'inactive' && row.meta_seen && !isActiveMetaAd(row)) ||
+      (metaState === 'no-delivery' && isEnabledWithoutDelivery(row)) ||
+      (metaState === 'inactive' && isInactiveMetaAd(row)) ||
       (metaState === 'all-meta' && row.meta_seen) ||
       (metaState === 'history' && !row.meta_seen)) &&
     (!mappingState || (mappingState === 'mapped' ? row.mapped : !row.mapped))
@@ -164,7 +167,7 @@ function renderCurrent() {
   const campaigns = new Set(rows.map(row => String(row.campaign_id || row.campaign_name || '')).filter(Boolean));
   const adsets = new Set(rows.map(row => String(row.adset_id || row.adset_name || '')).filter(Boolean));
   const metaState = $('currentMetaState')?.value || 'active';
-  const suffix = metaState === 'active' ? ' đang hoạt động' : '';
+  const suffix = metaState === 'active' ? ' đang phân phối' : '';
   $('currentTableSummary').textContent = `${campaigns.size} chiến dịch · ${adsets.size} nhóm quảng cáo · ${rows.length} QC${suffix}`;
   updateStatusSortButton('current');
   const body = $('currentBody');

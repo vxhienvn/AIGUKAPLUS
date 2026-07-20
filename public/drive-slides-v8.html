@@ -23,15 +23,15 @@
   </section>
 
   <div class="stats">
-    <div class="stat"><span class="label">QC Meta đang hoạt động</span><b id="sCurrent">0</b></div>
-    <div class="stat"><span class="label">Đang chạy · đã Mapping</span><b id="sMapped">0</b></div>
-    <div class="stat"><span class="label">Đang chạy · chưa Mapping</span><b id="sUnmapped">0</b></div>
+    <div class="stat"><span class="label">QC Meta đang phân phối</span><b id="sCurrent">0</b></div>
+    <div class="stat"><span class="label">Đang phân phối · đã Mapping</span><b id="sMapped">0</b></div>
+    <div class="stat"><span class="label">Đang phân phối · chưa Mapping</span><b id="sUnmapped">0</b></div>
     <div class="stat"><span class="label">Mapping đang lưu</span><b id="sTotal">0</b></div>
     <div class="stat"><span class="label">Ảnh Drive hợp lệ</span><b id="sImages">0</b></div>
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="current" onclick="showTab('current',this)">QC Meta đang hoạt động</button>
+    <button class="tab active" data-tab="current" onclick="showTab('current',this)">QC Meta đang phân phối</button>
     <button class="tab" data-tab="mappings" onclick="showTab('mappings',this)">Tất cả Mapping QC</button>
     <button class="tab" data-tab="products" onclick="showTab('products',this)">Sản phẩm & Drive</button>
     <button class="tab" data-tab="runtime" onclick="showTab('runtime',this)">Chế độ Mapping</button>
@@ -41,13 +41,13 @@
   </div>
 
   <section id="p-current" class="panel active">
-    <div class="panel-head"><div><h2>QC Meta đang hoạt động</h2><div class="panel-description">Mặc định chỉ hiện khi <b>tài khoản, chiến dịch, nhóm quảng cáo và QC đều hoạt động</b> trên Meta; số khách lấy trong 45 ngày gần nhất.</div></div></div>
+    <div class="panel-head"><div><h2>QC Meta đang phân phối</h2><div class="panel-description">Mặc định chỉ hiện khi <b>toàn bộ cây Meta đang bật và tài khoản có cả lượt hiển thị lẫn chi tiêu hôm nay</b>; số khách lấy trong 45 ngày gần nhất.</div></div></div>
     <div class="panel-body">
       <div class="notice">QC mới chưa Mapping sẽ <b>không bị ép sản phẩm</b>. Bot chỉ dùng lời khách hoặc hỏi lại cho đến khi bạn lưu Mapping.</div>
       <div class="toolbar">
         <select id="currentBusiness" onchange="businessFilterChanged()"><option value="">Tất cả BM AIGUKA nhìn thấy</option></select>
         <select id="currentAccount" onchange="renderCurrent()"><option value="">Tất cả tài khoản QC</option></select>
-        <select id="currentMetaState" onchange="renderCurrent()"><option value="active">Meta: Đang hoạt động</option><option value="inactive">Meta: Tạm dừng / có lỗi</option><option value="all-meta">Meta: Tất cả trạng thái</option><option value="history">Chỉ có trong lịch sử khách</option><option value="all">Tất cả Meta + lịch sử</option></select>
+        <select id="currentMetaState" onchange="renderCurrent()"><option value="active">Meta: Đang phân phối và chi tiêu</option><option value="no-delivery">Meta: Đang bật, chưa phân phối</option><option value="inactive">Meta: Tạm dừng / tài khoản có lỗi</option><option value="all-meta">Meta: Tất cả trạng thái</option><option value="history">Chỉ có trong lịch sử khách</option><option value="all">Tất cả Meta + lịch sử</option></select>
         <select id="currentState" onchange="renderCurrent()"><option value="">Tất cả trạng thái Mapping</option><option value="unmapped">Chưa Mapping</option><option value="mapped">Đã Mapping</option></select>
         <select id="currentSort" onchange="renderCurrent()"><option value="latest">Mới nhất</option><option value="customers">Nhiều khách nhất</option><option value="unmapped">Chưa Mapping trước</option></select>
       </div>

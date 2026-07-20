@@ -65,10 +65,18 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
       if (url.pathname.endsWith('/me/adaccounts')) {
         return json({ data: [
           { id: 'account-1', account_id: 'account-1', name: 'QC 1', account_status: 1, business: { id: 'business-1', name: 'BM 1' } },
-          { id: 'account-2', account_id: 'account-2', name: 'QC đã tắt', account_status: 2, business: { id: 'business-1', name: 'BM 1' } }
+          { id: 'account-2', account_id: 'account-2', name: 'QC đã tắt', account_status: 2, business: { id: 'business-1', name: 'BM 1' } },
+          { id: 'account-3', account_id: 'account-3', name: 'QC bật nhưng không phân phối', account_status: 1, business: { id: 'business-1', name: 'BM 1' } }
         ] });
       }
       if (url.pathname.endsWith('/me/businesses')) return json({ data: [{ id: 'business-1', name: 'BM 1' }] });
+      if (url.pathname.includes('/act_account-1/insights')) {
+        assert.equal(url.searchParams.get('date_preset'), 'today');
+        assert.equal(url.searchParams.get('level'), 'account');
+        return json({ data: [{ spend: '125000', impressions: '4200', reach: '3100', date_start: '2026-07-21', date_stop: '2026-07-21' }] });
+      }
+      if (url.pathname.includes('/act_account-2/insights')) return json({ data: [] });
+      if (url.pathname.includes('/act_account-3/insights')) return json({ data: [{ spend: '0', impressions: '0', reach: '0', date_start: '2026-07-21', date_stop: '2026-07-21' }] });
       if (url.pathname.includes('/act_account-1/ads')) {
         const fields = url.searchParams.get('fields') || '';
         assert.match(fields, /campaign\{id,name,status,effective_status\}/);
@@ -91,6 +99,13 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
           id: 'ad-3', name: 'QC thuộc tài khoản đã tắt', account_id: 'account-2', status: 'ACTIVE', effective_status: 'ACTIVE', configured_status: 'ACTIVE',
           campaign: { id: 'campaign-3', name: 'Chiến dịch cũ', status: 'ACTIVE', effective_status: 'ACTIVE' },
           adset: { id: 'adset-3', name: 'Nhóm cũ', status: 'ACTIVE', effective_status: 'ACTIVE', promoted_object: { page_id: 'page-1' } }
+        }] });
+      }
+      if (url.pathname.includes('/act_account-3/ads')) {
+        return json({ data: [{
+          id: 'ad-4', name: 'QC bật nhưng không phân phối', account_id: 'account-3', status: 'ACTIVE', effective_status: 'ACTIVE', configured_status: 'ACTIVE',
+          campaign: { id: 'campaign-4', name: 'Chiến dịch chưa phân phối', status: 'ACTIVE', effective_status: 'ACTIVE' },
+          adset: { id: 'adset-4', name: 'Nhóm chưa phân phối', status: 'ACTIVE', effective_status: 'ACTIVE', promoted_object: { page_id: 'page-1' } }
         }] });
       }
     }
@@ -134,10 +149,15 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   const meta = await nativeFetch(`${base}/api/ad-mapping/meta?sync=1`).then(response => response.json());
   assert.equal(meta.ok, true);
   assert.equal(meta.rows.find(row => row.ad_id === 'ad-1').delivery_status, 'ACTIVE');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-1').today_spend, 125000);
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-1').today_impressions, 4200);
   assert.equal(meta.rows.find(row => row.ad_id === 'ad-2').delivery_status, 'ADSET_PAUSED');
   assert.equal(meta.rows.find(row => row.ad_id === 'ad-2').adset_status, 'PAUSED');
   assert.equal(meta.rows.find(row => row.ad_id === 'ad-3').delivery_status, 'ACCOUNT_DISABLED');
   assert.equal(meta.rows.find(row => row.ad_id === 'ad-3').account_status, 2);
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-4').hierarchy_status, 'ACTIVE');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-4').delivery_status, 'ACCOUNT_NO_DELIVERY');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-4').account_has_delivery_today, false);
 
   const html = await nativeFetch(`${base}/drive-slides`).then(response => response.text());
   assert.match(html, /id="currentBusiness"/);
@@ -146,7 +166,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /id="mappingAccount"/);
   assert.match(html, /Tất cả tài khoản quảng cáo/);
   assert.match(html, /id="currentMetaState"/);
-  assert.match(html, /<option value="active">Meta: Đang hoạt động<\/option>/);
+  assert.match(html, /<option value="active">Meta: Đang phân phối và chi tiêu<\/option>/);
+  assert.match(html, /<option value="no-delivery">Meta: Đang bật, chưa phân phối<\/option>/);
+  assert.match(html, /QC Meta đang phân phối/);
   assert.match(html, /id="currentTableSummary"/);
   assert.match(html, /class="folder-picker-inline"/);
   assert.match(html, /Chiến dịch \/ Nhóm quảng cáo/);
@@ -167,6 +189,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(coreSource, /meta_seen: false/);
   assert.match(coreSource, /meta_seen: true/);
   assert.match(coreSource, /function isActiveMetaAd/);
+  assert.match(coreSource, /function isEnabledWithoutDelivery/);
+  assert.match(coreSource, /function isInactiveMetaAd/);
+  assert.match(coreSource, /meta_hierarchy_status/);
   assert.match(coreSource, /meta_delivery_status/);
   assert.match(coreSource, /function fillMappingAccountSelect/);
   assert.match(coreSource, /function mappingBusinessFilterChanged/);
@@ -215,6 +240,8 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(renderSource, /ACCOUNT_DISABLED/);
   assert.match(renderSource, /ACCOUNT_UNSETTLED/);
   assert.match(renderSource, /ACCOUNT_CLOSED/);
+  assert.match(renderSource, /ACCOUNT_NO_DELIVERY/);
+  assert.match(renderSource, /DELIVERY_UNVERIFIED/);
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
   assert.match(renderSource, /\/api\/slide-manager\/drive\/sync-all/);
