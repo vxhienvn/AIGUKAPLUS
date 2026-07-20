@@ -16,6 +16,8 @@ const state = {
   productAutoSyncStarted: false,
   syncAllRunning: false,
   syncAllPollToken: 0,
+  currentStatusSort: '',
+  mappingStatusSort: '',
   folderSelections: { m_folders: new Set(), sm_folders: new Set() }
 };
 
@@ -118,8 +120,21 @@ function mappingHasUsableScope(mapping) {
   return Boolean(productItem || (productGroup && productGroup !== 'general') || (Array.isArray(folders) && folders.length));
 }
 
+function metaEffectiveStatus(row) {
+  if (!row?.meta_seen) return 'HISTORICAL';
+  return String(row.meta_effective_status || row.effective_status || row.status || '').trim().toUpperCase() || 'UNKNOWN';
+}
+
+function isActiveMetaAd(row) {
+  return Boolean(row?.meta_seen) && metaEffectiveStatus(row) === 'ACTIVE';
+}
+
 function mergeMetaAds() {
-  const ads = new Map(state.currentAds.map(row => [String(row.ad_id), row]));
+  const ads = new Map(state.currentAds.map(row => [String(row.ad_id), {
+    ...row,
+    meta_seen: false,
+    meta_effective_status: ''
+  }]));
   const pages = new Map((state.data?.pages || []).map(row => [String(row.page_id), row.page_name || row.page_id]));
   const accounts = new Map(state.adAccounts.map(row => [String(row.ad_account_id), row]));
   for (const row of state.metaAds) {
@@ -149,7 +164,10 @@ function mergeMetaAds() {
       ad_account_name: row.ad_account_name || account?.ad_account_name || current.ad_account_name,
       business_id: row.business_id || account?.business_id || current.business_id || '',
       business_name: row.business_name || account?.business_name || current.business_name || '',
-      effective_status: row.effective_status || row.status || current.effective_status
+      effective_status: row.effective_status || row.status || '',
+      configured_status: row.configured_status || current.configured_status || '',
+      meta_seen: true,
+      meta_effective_status: row.effective_status || row.status || ''
     });
     const mapping = state.mappings.find(item => String(item.ad_id) === id);
     current.mapping = mapping || current.mapping;
@@ -506,9 +524,10 @@ function prepareDriveFrame(frame) {
 
 function renderAll() {
   const summary = state.data?.summary || {};
-  $('sCurrent').textContent = state.currentAds.length;
-  $('sMapped').textContent = state.currentAds.filter(row => row.mapped).length;
-  $('sUnmapped').textContent = state.currentAds.filter(row => !row.mapped).length;
+  const activeMetaAds = state.currentAds.filter(isActiveMetaAd);
+  $('sCurrent').textContent = activeMetaAds.length;
+  $('sMapped').textContent = activeMetaAds.filter(row => row.mapped).length;
+  $('sUnmapped').textContent = activeMetaAds.filter(row => !row.mapped).length;
   $('sTotal').textContent = state.mappings.length;
   $('sImages').textContent = summary.active_images || 0;
   renderCurrent();

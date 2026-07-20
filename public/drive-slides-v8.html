@@ -23,16 +23,16 @@
   </section>
 
   <div class="stats">
-    <div class="stat"><span class="label">QC phát sinh gần đây</span><b id="sCurrent">0</b></div>
-    <div class="stat"><span class="label">QC đã Mapping</span><b id="sMapped">0</b></div>
-    <div class="stat"><span class="label">QC chưa Mapping</span><b id="sUnmapped">0</b></div>
+    <div class="stat"><span class="label">QC Meta đang hoạt động</span><b id="sCurrent">0</b></div>
+    <div class="stat"><span class="label">Đang chạy · đã Mapping</span><b id="sMapped">0</b></div>
+    <div class="stat"><span class="label">Đang chạy · chưa Mapping</span><b id="sUnmapped">0</b></div>
     <div class="stat"><span class="label">Mapping đang lưu</span><b id="sTotal">0</b></div>
     <div class="stat"><span class="label">Ảnh Drive hợp lệ</span><b id="sImages">0</b></div>
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="current" onclick="showTab('current',this)">QC hiện tại</button>
-    <button class="tab" data-tab="mappings" onclick="showTab('mappings',this)">Mapping QC</button>
+    <button class="tab active" data-tab="current" onclick="showTab('current',this)">QC Meta đang hoạt động</button>
+    <button class="tab" data-tab="mappings" onclick="showTab('mappings',this)">Tất cả Mapping QC</button>
     <button class="tab" data-tab="products" onclick="showTab('products',this)">Sản phẩm & Drive</button>
     <button class="tab" data-tab="runtime" onclick="showTab('runtime',this)">Chế độ Mapping</button>
     <button class="tab" data-tab="test" onclick="showTab('test',this)">Test Mapping</button>
@@ -41,25 +41,27 @@
   </div>
 
   <section id="p-current" class="panel active">
-    <div class="panel-head"><h2>QC đang phát sinh khách</h2><span class="muted">Mặc định lấy 45 ngày gần nhất và bổ sung danh sách Meta đang có.</span></div>
+    <div class="panel-head"><div><h2>QC Meta đang hoạt động</h2><div class="panel-description">Mặc định chỉ hiện quảng cáo có <b>effective_status = ACTIVE</b> trên Meta; số khách lấy trong 45 ngày gần nhất.</div></div></div>
     <div class="panel-body">
       <div class="notice">QC mới chưa Mapping sẽ <b>không bị ép sản phẩm</b>. Bot chỉ dùng lời khách hoặc hỏi lại cho đến khi bạn lưu Mapping.</div>
       <div class="toolbar">
         <select id="currentBusiness" onchange="businessFilterChanged()"><option value="">Tất cả BM AIGUKA nhìn thấy</option></select>
         <select id="currentAccount" onchange="renderCurrent()"><option value="">Tất cả tài khoản QC</option></select>
-        <select id="currentState" onchange="renderCurrent()"><option value="">Tất cả trạng thái</option><option value="unmapped">Chưa Mapping</option><option value="mapped">Đã Mapping</option></select>
+        <select id="currentMetaState" onchange="renderCurrent()"><option value="active">Meta: Đang hoạt động</option><option value="inactive">Meta: Tạm dừng / có lỗi</option><option value="all-meta">Meta: Tất cả trạng thái</option><option value="history">Chỉ có trong lịch sử khách</option><option value="all">Tất cả Meta + lịch sử</option></select>
+        <select id="currentState" onchange="renderCurrent()"><option value="">Tất cả trạng thái Mapping</option><option value="unmapped">Chưa Mapping</option><option value="mapped">Đã Mapping</option></select>
         <select id="currentSort" onchange="renderCurrent()"><option value="latest">Mới nhất</option><option value="customers">Nhiều khách nhất</option><option value="unmapped">Chưa Mapping trước</option></select>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Chiến dịch / Nhóm quảng cáo</th><th>Khách</th><th>Mapping hiện tại</th><th>Drive</th><th>Thao tác</th></tr></thead><tbody id="currentBody"></tbody></table></div>
+      <div id="currentTableSummary" class="table-summary"></div>
+      <div class="table-wrap"><table><thead><tr><th><div class="column-heading"><span>Chiến dịch / Nhóm quảng cáo</span><button id="currentStatusSort" class="header-sort" type="button" onclick="toggleStatusSort('current')" title="Sắp xếp theo trạng thái">Trạng thái ↕</button></div></th><th>Khách</th><th>Mapping hiện tại</th><th>Drive</th><th>Thao tác</th></tr></thead><tbody id="currentBody"></tbody></table></div>
     </div>
   </section>
 
   <section id="p-mappings" class="panel">
-    <div class="panel-head"><h2>Toàn bộ Mapping QC</h2><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
+    <div class="panel-head"><div><h2>Tất cả Mapping QC</h2><div class="panel-description">Kho cấu hình đã lưu, gồm cả QC đang chạy, tạm dừng và QC cũ; dùng để kiểm tra, sửa hoặc tắt nguồn ảnh.</div></div><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
     <div class="panel-body">
       <div class="notice warning compact"><b>“Chưa chọn thư mục Drive”</b> là Mapping cũ đã có tên QC nhưng chưa có nhóm sản phẩm, catalog hoặc thư mục nguồn. Bot chưa có nguồn ảnh riêng cho QC đó; bấm <b>Sửa</b> để chọn phạm vi.</div>
-      <div class="toolbar"><input id="mappingSearch" placeholder="Tìm Ad ID, tên QC, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="current">QC đang phát sinh trước</option><option value="all">Tất cả kể cả cũ</option><option value="stale">Chỉ Mapping cũ</option></select></div>
-      <div class="table-wrap"><table><thead><tr><th>Chiến dịch / Nhóm quảng cáo</th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
+      <div class="toolbar"><input id="mappingSearch" placeholder="Tìm tên QC, quảng cáo, chiến dịch, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="all">Tất cả Mapping</option><option value="current">Có khách trong 45 ngày</option><option value="stale">Không có khách trong 45 ngày</option></select></div>
+      <div class="table-wrap"><table><thead><tr><th><div class="column-heading"><span>Tên QC / Quảng cáo</span><button id="mappingStatusSort" class="header-sort" type="button" onclick="toggleStatusSort('mapping')" title="Sắp xếp theo trạng thái">Trạng thái ↕</button></div></th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
   </section>
 

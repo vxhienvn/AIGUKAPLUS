@@ -29,10 +29,44 @@ function statusDotHtml(value, customLabel = '') {
     DISAPPROVED: 'Không được duyệt',
     WITH_ISSUES: 'Có lỗi',
     ERROR: 'Có lỗi',
-    FAILED: 'Thất bại'
+    FAILED: 'Thất bại',
+    HISTORICAL: 'Chỉ có trong lịch sử khách hoặc Mapping cũ',
+    UNKNOWN: 'Meta chưa trả trạng thái'
   };
   const label = customLabel || labels[statusValue] || 'Chưa rõ trạng thái';
   return `<span class="status-dot ${tone}" title="${esc(label)}" aria-label="${esc(label)}"></span>`;
+}
+
+function statusRank(value) {
+  const statusValue = String(value || '').trim().toUpperCase();
+  if (statusValue === 'ACTIVE') return 0;
+  if (['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED'].includes(statusValue)) return 1;
+  if (['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'].includes(statusValue)) return 2;
+  if (['WITH_ISSUES', 'DISAPPROVED', 'ERROR', 'FAILED', 'OFF', 'DISABLED'].includes(statusValue)) return 3;
+  return 4;
+}
+
+function updateStatusSortButton(kind) {
+  const key = kind === 'mapping' ? 'mappingStatusSort' : 'currentStatusSort';
+  const button = $(key);
+  if (!button) return;
+  const direction = state[key];
+  button.textContent = `Trạng thái ${direction === 'asc' ? '↑' : (direction === 'desc' ? '↓' : '↕')}`;
+  button.classList.toggle('active', Boolean(direction));
+  button.setAttribute('aria-pressed', String(Boolean(direction)));
+}
+
+function toggleStatusSort(kind) {
+  const key = kind === 'mapping' ? 'mappingStatusSort' : 'currentStatusSort';
+  state[key] = state[key] === 'asc' ? 'desc' : 'asc';
+  if (kind === 'mapping') renderMappings();
+  else renderCurrent();
+}
+
+function sortRowsByStatus(rows, direction, statusFn) {
+  if (!direction) return rows;
+  const multiplier = direction === 'desc' ? -1 : 1;
+  return rows.sort((a, b) => multiplier * (statusRank(statusFn(a)) - statusRank(statusFn(b))));
 }
 
 function compactFolderHtml(ids, detailBuilder) {
@@ -71,16 +105,23 @@ function currentRows() {
   let rows = [...state.currentAds];
   const businessId = $('currentBusiness').value;
   const accountId = $('currentAccount').value;
+  const metaState = $('currentMetaState')?.value || 'active';
   const mappingState = $('currentState').value;
   const sort = $('currentSort').value;
   rows = rows.filter(row =>
     (!businessId || String(row.business_id || '') === businessId) &&
     (!accountId || String(row.ad_account_id || row.mapping?.ad_account_id || '') === accountId) &&
+    (metaState === 'all' ||
+      (metaState === 'active' && isActiveMetaAd(row)) ||
+      (metaState === 'inactive' && row.meta_seen && !isActiveMetaAd(row)) ||
+      (metaState === 'all-meta' && row.meta_seen) ||
+      (metaState === 'history' && !row.meta_seen)) &&
     (!mappingState || (mappingState === 'mapped' ? row.mapped : !row.mapped))
   );
   if (sort === 'customers') rows.sort((a, b) => (b.customers || 0) - (a.customers || 0));
   else if (sort === 'unmapped') rows.sort((a, b) => Number(a.mapped) - Number(b.mapped) || new Date(b.last_referral || 0) - new Date(a.last_referral || 0));
   else rows.sort((a, b) => new Date(b.last_referral || 0) - new Date(a.last_referral || 0));
+  sortRowsByStatus(rows, state.currentStatusSort, metaEffectiveStatus);
   return rows;
 }
 
@@ -99,12 +140,18 @@ function folderListHtml(mapping) {
 
 function renderCurrent() {
   const rows = currentRows();
+  const campaigns = new Set(rows.map(row => String(row.campaign_id || row.campaign_name || '')).filter(Boolean));
+  const adsets = new Set(rows.map(row => String(row.adset_id || row.adset_name || '')).filter(Boolean));
+  const metaState = $('currentMetaState')?.value || 'active';
+  const suffix = metaState === 'active' ? ' đang hoạt động' : '';
+  $('currentTableSummary').textContent = `${campaigns.size} chiến dịch · ${adsets.size} nhóm quảng cáo · ${rows.length} QC${suffix}`;
+  updateStatusSortButton('current');
   const body = $('currentBody');
   body.innerHTML = rows.length ? '' : '<tr><td colspan="5" class="empty">Không có QC phù hợp.</td></tr>';
   for (const row of rows) {
     const campaign = row.campaign_name || row.mapping?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
     const adset = row.adset_name || row.mapping?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
-    const effectiveStatus = row.effective_status || row.status || row.mapping?.effective_status || '';
+    const effectiveStatus = metaEffectiveStatus(row);
     const statusDot = statusDotHtml(effectiveStatus);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
@@ -114,25 +161,37 @@ function renderCurrent() {
 
 function mappingCurrentInfo(adId) { return state.currentAds.find(row => String(row.ad_id) === String(adId)); }
 
+function hasRecentReferral(row) {
+  return Boolean(row?.last_referral) || Number(row?.referrals || 0) > 0;
+}
+
 function renderMappings() {
   const query = $('mappingSearch').value.toLocaleLowerCase('vi-VN').trim();
   const mode = $('mappingAge').value;
   let rows = state.mappings.filter(mapping => !query || [mapping.ad_id, mapping.ad_name, mapping.campaign_name, mapping.adset_name, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN').includes(query));
   rows = rows.filter(mapping => {
     const current = mappingCurrentInfo(mapping.ad_id);
-    return mode === 'all' || (mode === 'current' ? Boolean(current) : !current);
+    const recent = hasRecentReferral(current);
+    return mode === 'all' || (mode === 'current' ? recent : !recent);
   });
+  sortRowsByStatus(rows, state.mappingStatusSort, mapping => {
+    if (mapping.is_active === false) return 'OFF';
+    return metaEffectiveStatus(mappingCurrentInfo(mapping.ad_id));
+  });
+  updateStatusSortButton('mapping');
   const body = $('mappingBody');
   body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có Mapping phù hợp.</td></tr>';
   for (const mapping of rows) {
     const current = mappingCurrentInfo(mapping.ad_id);
+    const adName = current?.ad_title || current?.ad_name || mapping.ad_name || 'QC chưa có tên';
     const campaign = mapping.campaign_name || current?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
     const adset = mapping.adset_name || current?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
-    const effectiveStatus = current?.effective_status || current?.status || mapping.effective_status || (mapping.is_active === false ? 'OFF' : '');
+    const effectiveStatus = mapping.is_active === false ? 'OFF' : metaEffectiveStatus(current);
     const statusDot = statusDotHtml(effectiveStatus);
     const scope = mappingScope(mapping);
+    const recent = hasRecentReferral(current);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${current ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
+    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(adName)}</b></div><div class="status-subtitle"><span>Chiến dịch: ${esc(campaign)}</span></div><div class="status-subtitle"><span>Nhóm: ${esc(adset)}</span></div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${recent ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
     body.appendChild(tr);
   }
 }
