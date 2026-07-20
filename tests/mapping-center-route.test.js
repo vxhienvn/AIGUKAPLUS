@@ -128,9 +128,12 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(currentRenderer, /statusDotHtml/);
   assert.match(currentRenderer, /metaEffectiveStatus\(row\)/);
   assert.match(currentRenderer, /currentTableSummary/);
+  assert.match(currentRenderer, /ad_title/);
+  assert.match(currentRenderer, /current-ad-name/);
+  assert.match(currentRenderer, /QC:/);
   assert.match(currentRenderer, /colspan="5"/);
   assert.doesNotMatch(currentRenderer, /colspan="6"/);
-  assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"|ad_account_name|business_name|ad_title|row\.ad_name/);
+  assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"|ad_account_name|business_name/);
   assert.match(mappingRenderer, /campaign_name/);
   assert.match(mappingRenderer, /adset_name/);
   assert.match(mappingRenderer, /mapping\.ad_name/);
@@ -147,6 +150,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(cssSource, /status-dot/);
   assert.match(cssSource, /folder-disclosure/);
   assert.match(cssSource, /header-sort/);
+  assert.match(cssSource, /current-ad-name/);
+  assert.match(renderSource, /QC chưa tạo Mapping/);
+  assert.match(renderSource, /QC cũ đã có bản ghi/);
+  assert.match(renderSource, /Mapping đã tắt/);
   assert.match(renderSource, /Thiếu nguồn ảnh/);
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
