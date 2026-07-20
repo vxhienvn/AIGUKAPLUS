@@ -4,7 +4,7 @@ const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v23.0";
 const WORKER_NAME = process.env.AIGUKA_META_PROFILE_SYNC_WORKER_NAME || "aiguka-railway-meta-profile-sync";
-const WORKER_VERSION = "oauth_unified_sync_v1";
+const WORKER_VERSION = "oauth_unified_sync_v2_pagination_fallback";
 const POLL_MS = Math.max(3000, Number(process.env.AIGUKA_META_PROFILE_SYNC_POLL_MS || 5000));
 
 let running = false;
@@ -43,8 +43,14 @@ async function request(path, options = {}) {
 const rest = (path, options = {}) => request(`/rest/v1/${path}`, options);
 const rpc = (name, body = {}) => request(`/rest/v1/rpc/${name}`, { method: "POST", body });
 
+function graphUrl(path) {
+  const raw = String(path || "").trim();
+  if (/^https?:\/\//i.test(raw)) return new URL(raw);
+  return new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${raw.replace(/^\//, "")}`);
+}
+
 async function graph(path, token, query = {}) {
-  const url = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${String(path).replace(/^\//, "")}`);
+  const url = graphUrl(path);
   url.searchParams.set("access_token", token);
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
@@ -57,6 +63,7 @@ async function graph(path, token, query = {}) {
     const error = new Error(data?.error?.message || `META_HTTP_${response.status}`);
     error.code = data?.error?.code;
     error.subcode = data?.error?.error_subcode;
+    error.details = data?.error || data;
     throw error;
   }
   return data;
@@ -74,7 +81,7 @@ async function fetchPageTokens(force = false) {
     for (const page of data.data || []) {
       if (page.id && page.access_token) values.set(String(page.id), { token: page.access_token, name: page.name, tasks: page.tasks || [] });
     }
-    next = data?.paging?.next ? data.paging.next.replace(`https://graph.facebook.com/${GRAPH_VERSION}/`, "") : "";
+    next = data?.paging?.next || "";
   }
   pageTokenCache = { expiresAt: Date.now() + 5 * 60_000, values };
   return values;
@@ -108,7 +115,7 @@ async function findConversation(pageId, senderId, token) {
     for (const conversation of data.data || []) {
       if ((conversation.participants?.data || []).some((participant) => String(participant.id) === String(senderId))) return conversation;
     }
-    next = data?.paging?.next ? data.paging.next.replace(`https://graph.facebook.com/${GRAPH_VERSION}/`, "") : "";
+    next = data?.paging?.next || "";
   }
   return null;
 }
@@ -134,13 +141,34 @@ async function fetchProfile(senderId, token, participantName = null) {
   return { profile, genderAvailable };
 }
 
+function withoutMessageField(path) {
+  const url = graphUrl(path);
+  const fields = String(url.searchParams.get("fields") || "")
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => field && field !== "message");
+  url.searchParams.set("fields", fields.join(","));
+  return url.toString();
+}
+
+async function fetchMessagePage(path, token) {
+  try {
+    return await graph(path, token);
+  } catch (error) {
+    const unsupportedMessageField = Number(error.code) === 100
+      && /nonexisting field\s*\(message\)|field\s+message/i.test(String(error.message || ""));
+    if (!unsupportedMessageField) throw error;
+    return graph(withoutMessageField(path), token);
+  }
+}
+
 async function fetchMessages(conversationId, token) {
   const messages = [];
   let next = `${conversationId}/messages?fields=id,message,created_time,from,to,attachments&limit=100`;
   for (let page = 0; next && page < 10; page += 1) {
-    const data = await graph(next, token);
+    const data = await fetchMessagePage(next, token);
     messages.push(...(data.data || []));
-    next = data?.paging?.next ? data.paging.next.replace(`https://graph.facebook.com/${GRAPH_VERSION}/`, "") : "";
+    next = data?.paging?.next || "";
   }
   return messages;
 }
@@ -190,7 +218,16 @@ async function heartbeat(status = "healthy", lastError = null, details = {}) {
       worker_type: "meta_profile_sync",
       worker_version: WORKER_VERSION,
       status,
-      capabilities: { oauth_page_tokens: true, profile: true, conversation_history: true, unified_token_source: true, truthful_item_health: true, ...details },
+      capabilities: {
+        oauth_page_tokens: true,
+        profile: true,
+        conversation_history: true,
+        unified_token_source: true,
+        absolute_paging_urls: true,
+        unsupported_message_field_fallback: true,
+        truthful_item_health: true,
+        ...details,
+      },
       last_error: lastError ? String(lastError).slice(0, 500) : null,
       last_seen_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -215,6 +252,7 @@ async function poll() {
   if (!configured() || running) return;
   running = true;
   try {
+    await rpc("v8_reconcile_meta_sync_responses").catch(() => {});
     const claimed = await rpc("v8_claim_conversation_sync_batch", { p_worker: WORKER_NAME, p_batch_size: 4 });
     let failures = 0;
     for (const item of Array.isArray(claimed) ? claimed : []) {
