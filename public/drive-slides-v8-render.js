@@ -54,10 +54,12 @@ function renderCurrent() {
   const body = $('currentBody');
   body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có QC phù hợp.</td></tr>';
   for (const row of rows) {
-    const account = row.ad_account_name || row.ad_account_id || 'Chưa rõ tài khoản QC';
-    const business = row.business_name || (row.business_id ? `BM ${row.business_id}` : '');
+    const account = row.ad_account_name || 'Chưa rõ tài khoản QC';
+    const business = row.business_name || '';
+    const campaign = row.campaign_name || row.mapping?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
+    const adset = row.adset_name || row.mapping?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><div class="small muted">${esc(account)}${business ? ` · ${esc(business)}` : ''}</div><b>${esc(row.ad_title || row.ad_name || 'QC chưa có tên')}</b><div class="small muted">${esc(row.page_name || row.page_id || '-')}</div><div class="id">${esc(row.ad_id)}</div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td>${esc(row.campaign_name || '-')}<div class="small muted">${esc(row.adset_name || '-')}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
+    tr.innerHTML = `<td><div class="small muted">${esc(account)}${business ? ` · ${esc(business)}` : ''}</div><b>${esc(row.ad_title || row.ad_name || 'QC chưa có tên')}</b><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${esc(campaign)}</b><div class="small muted">${esc(adset)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
     body.appendChild(tr);
   }
 }

@@ -168,10 +168,15 @@ export function installMappingCenter(app, options = {}) {
             const mapping = mappingByAd.get(row.ad_id) || null;
             return {
                 ...row,
+                ad_title: row.ad_title || mapping?.ad_name || '',
                 customers: row.customers.size,
                 contacts: row.contacts.size,
                 ad_account_id: mapping?.ad_account_id || '',
                 ad_account_name: mapping?.ad_account_name || '',
+                campaign_id: mapping?.campaign_id || '',
+                campaign_name: mapping?.campaign_name || '',
+                adset_id: mapping?.adset_id || '',
+                adset_name: mapping?.adset_name || '',
                 mapped: Boolean(mapping && mapping.is_active !== false && mapping.enabled !== false),
                 mapping
             };
@@ -469,7 +474,10 @@ export function installMappingCenter(app, options = {}) {
                 return [];
             }
         }));
-        const visibleStatuses = new Set(['ACTIVE', 'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED']);
+        const visibleStatuses = new Set([
+            'ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED',
+            'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED', 'DISAPPROVED'
+        ]);
         const rows = batches.flat().filter(row => row.ad_id && visibleStatuses.has(String(row.effective_status || row.status || '').toUpperCase()));
         metaAdsCache.rows = rows;
         metaAdsCache.adAccounts = adAccounts;

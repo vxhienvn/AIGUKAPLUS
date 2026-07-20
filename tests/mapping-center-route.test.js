@@ -14,13 +14,22 @@ const fixtureByResource = {
   }],
   ad_mappings: [{
     id: 1, ad_id: 'ad-1', ad_name: 'QC tổng hợp', ad_account_id: 'account-1', ad_account_name: 'QC 1',
+    campaign_id: 'campaign-1', campaign_name: 'Cửa hàng 2', adset_id: 'adset-1', adset_name: 'Cửa hàng 26-35 - Bản sao',
     product_group: '', product_item_key: '', mapping_target_type: 'scope', mapping_mode: 'legacy',
     selected_folders: ['Bathroom/Bồn tắm'], drive_folders: ['Bathroom/Bồn tắm'], enabled: true, is_active: true
+  }, {
+    id: 2, ad_id: 'ad-2', ad_name: 'QC tổng hợp', ad_account_id: 'account-1', ad_account_name: 'QC 1',
+    campaign_id: 'campaign-2', campaign_name: 'Cửa hàng 1', adset_id: 'adset-2', adset_name: 'Cửa hàng 26km',
+    product_group: '', product_item_key: '', mapping_target_type: 'scope', mapping_mode: 'legacy',
+    selected_folders: [], drive_folders: [], enabled: true, is_active: true
   }],
   v8_slide_mapping: [],
   v8_meta_ad_referral_entries: [{
     page_id: 'page-1', page_name: 'Page 1', sender_id: 'customer-1', ad_id: 'ad-1', ad_title: 'QC tổng hợp',
     post_id: '', referral_source: 'ADS', referral_at: '2026-07-20T00:00:00Z', has_phone: false, has_zalo: false
+  }, {
+    page_id: 'page-1', page_name: 'Page 1', sender_id: 'customer-2', ad_id: 'ad-2', ad_title: 'QC tổng hợp',
+    post_id: '', referral_source: 'ADS', referral_at: '2026-07-19T00:00:00Z', has_phone: false, has_zalo: false
   }],
   v8_drive_assets: [{
     product_key: 'bon_tam', catalog_key: 'bon_tam', parent_folder_id: 'folder-bon-tam',
@@ -60,6 +69,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.deepEqual(bootstrap.mappings[0].resolved_folder_ids, ['folder-bon-tam']);
   assert.equal(bootstrap.mappings[0].folder_sync_status, 'synced');
   assert.equal(bootstrap.current_ads[0].ad_account_id, 'account-1');
+  assert.equal(bootstrap.current_ads.length, 2);
+  assert.equal(bootstrap.current_ads.find(row => row.ad_id === 'ad-1').campaign_name, 'Cửa hàng 2');
+  assert.equal(bootstrap.current_ads.find(row => row.ad_id === 'ad-1').adset_name, 'Cửa hàng 26-35 - Bản sao');
+  assert.equal(bootstrap.current_ads.find(row => row.ad_id === 'ad-2').campaign_name, 'Cửa hàng 1');
   assert.equal(bootstrap.ad_accounts[0].ad_account_name, 'QC 1');
   assert.deepEqual(bootstrap.businesses, [{ business_id: 'business-1', business_name: 'business-1' }]);
 
@@ -67,5 +80,12 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /id="currentBusiness"/);
   assert.match(html, /id="currentAccount"/);
   assert.match(html, /class="folder-picker-inline"/);
+  assert.match(html, /Chiến dịch \/ Nhóm quảng cáo/);
   assert.doesNotMatch(html, /id="currentSearch"|id="m_target"|id="m_recognition"/);
+
+  const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
+  const currentRenderer = renderSource.match(/function renderCurrent\(\) \{[\s\S]*?\n\}\n\nfunction mappingCurrentInfo/)?.[0] || '';
+  assert.match(currentRenderer, /campaign_name/);
+  assert.match(currentRenderer, /adset_name/);
+  assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"/);
 });
