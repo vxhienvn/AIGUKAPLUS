@@ -24,7 +24,7 @@ if (source.includes(marker)) {
 
   const newBlock = `  // AIGUKA_DAILY_RUNTIME_FALLBACK_V1
   const fetchRuntimeDaily=async()=>{
-    const supabaseUrl=String(process.env.SUPABASE_URL||'').replace(/\\$/,'');
+    const supabaseUrl=String(process.env.SUPABASE_URL||'').replace(/\\/$/,'');
     const serviceKey=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
     if(!supabaseUrl||!serviceKey)return{rows:[],error:'RUNTIME_DAILY_NOT_CONFIGURED'};
     try{
