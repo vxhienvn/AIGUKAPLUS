@@ -1,5 +1,7 @@
 import { loadActiveMetaConnection } from "./meta-token-store.js";
 
+process.env.META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "AIGUKA_V8_META_VERIFY";
+
 try {
   const connection = await loadActiveMetaConnection();
   if (connection?.accessToken) {
