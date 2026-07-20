@@ -17,22 +17,22 @@ const clientFile = "bot-control-client.js";
 let client = fs.readFileSync(clientFile, "utf8");
 if (!client.includes(marker)) {
   const labelsOld = '  TEST: "Chạy thử nghiệm",\n  PRODUCTION: "Hoạt động chính thức",';
-  const labelsNew = '  TEST: "Chạy thử nghiệm",\n  SUPPORT: "Hỗ trợ Sale — chỉ gửi slide",\n  PRODUCTION: "Hoạt động chính thức",';
+  const labelsNew = '  TEST: "Chạy thử nghiệm",\n  SUPPORT: "Hỗ trợ Sale — slide ngay, chữ sau thời gian chờ",\n  PRODUCTION: "Hoạt động chính thức",';
   if (!client.includes(labelsOld)) throw new Error("PAGE_SUPPORT_CLIENT_LABEL_ANCHOR_NOT_FOUND");
   client = client.replace(labelsOld, labelsNew);
 
   const optionsOld = '<option value="TEST" ' + "' + (current === \"TEST\" ? \"selected\" : \"\") + '" + '>Chạy thử nghiệm</option><option value="PRODUCTION" ';
-  const optionsNew = '<option value="TEST" ' + "' + (current === \"TEST\" ? \"selected\" : \"\") + '" + '>Chạy thử nghiệm</option><option value="SUPPORT" ' + "' + (current === \"SUPPORT\" ? \"selected\" : \"\") + '" + '>Hỗ trợ Sale — chỉ gửi slide</option><option value="PRODUCTION" ';
+  const optionsNew = '<option value="TEST" ' + "' + (current === \"TEST\" ? \"selected\" : \"\") + '" + '>Chạy thử nghiệm</option><option value="SUPPORT" ' + "' + (current === \"SUPPORT\" ? \"selected\" : \"\") + '" + '>Hỗ trợ Sale — slide ngay, chữ sau thời gian chờ</option><option value="PRODUCTION" ';
   if (!client.includes(optionsOld)) throw new Error("PAGE_SUPPORT_CLIENT_OPTIONS_ANCHOR_NOT_FOUND");
   client = client.replace(optionsOld, optionsNew);
 
   const statusOld = 'setStatus("Đã cập nhật chế độ Trang");';
   if (client.includes(statusOld)) {
-    client = client.replace(statusOld, 'setStatus(mode === "SUPPORT" ? "Đã lưu Hỗ trợ Sale: Page không gửi chữ, chỉ được gửi slide khi chính sách runtime cho phép." : "Đã cập nhật chế độ Trang");');
+    client = client.replace(statusOld, 'setStatus(mode === "SUPPORT" ? "Đã lưu Hỗ trợ Sale: gửi slide khi khách xin mẫu; trả lời chữ sau thời gian chờ nếu Sale chưa phản hồi." : "Đã cập nhật chế độ Trang");');
   }
 
   const patchedStatusOld = 'setStatus(blockers.length\n      ? "Đã lưu chế độ Trang. Chế độ thực tế hiện là " + actual + "; hệ thống còn " + blockers.length + " cảnh báo an toàn."\n      : "Đã lưu và cập nhật chế độ Trang");';
-  const patchedStatusNew = 'setStatus(blockers.length\n      ? "Đã lưu chế độ Trang. Chế độ thực tế hiện là " + actual + "; hệ thống còn " + blockers.length + " cảnh báo an toàn."\n      : (mode === "SUPPORT" ? "Đã lưu Hỗ trợ Sale: chỉ gửi slide, không gửi tin nhắn chữ." : "Đã lưu và cập nhật chế độ Trang"));';
+  const patchedStatusNew = 'setStatus(blockers.length\n      ? "Đã lưu chế độ Trang. Chế độ thực tế hiện là " + actual + "; hệ thống còn " + blockers.length + " cảnh báo an toàn."\n      : (mode === "SUPPORT" ? "Đã lưu Hỗ trợ Sale: slide theo yêu cầu, chữ tiếp quản sau thời gian chờ." : "Đã lưu và cập nhật chế độ Trang"));';
   if (client.includes(patchedStatusOld)) client = client.replace(patchedStatusOld, patchedStatusNew);
 
   client = client.replace("loadState();", "// AIGUKA_PAGE_SUPPORT_SLIDE_ONLY_V1\nloadState();");
@@ -44,4 +44,4 @@ for (const file of [serverFile, clientFile]) {
   if (syntax.status !== 0) throw new Error(`PAGE_SUPPORT_SYNTAX_${file}:${syntax.stderr || syntax.stdout}`);
 }
 
-console.log("[AIGUKA] Per-Page SUPPORT mode installed: text OFF, slide ON by runtime policy");
+console.log("[AIGUKA] Per-Page SUPPORT mode installed: slide on request, text takeover after configured Sale wait");
