@@ -1,5 +1,14 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import { loadActiveMetaConnection } from "./meta-token-store.js";
+import { syncMetaAdAccountsAndMappings } from "./meta-ad-account-sync.js";
+
+try {
+  const metaConnection = await loadActiveMetaConnection();
+  if (metaConnection) await syncMetaAdAccountsAndMappings(metaConnection);
+} catch (error) {
+  console.error("[AIGUKA] Daily account sync failed:", error.message);
+}
 
 const file = "v7-dashboard-stable.js";
 let source = fs.readFileSync(file, "utf8");
@@ -15,7 +24,7 @@ if (source.includes(marker)) {
 
   const newBlock = `  // AIGUKA_DAILY_RUNTIME_FALLBACK_V1
   const fetchRuntimeDaily=async()=>{
-    const supabaseUrl=String(process.env.SUPABASE_URL||'').replace(/\\/$/,'');
+    const supabaseUrl=String(process.env.SUPABASE_URL||'').replace(/\\$/,'');
     const serviceKey=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
     if(!supabaseUrl||!serviceKey)return{rows:[],error:'RUNTIME_DAILY_NOT_CONFIGURED'};
     try{
