@@ -103,6 +103,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /Tải cây Drive/);
   assert.doesNotMatch(html, /id="currentSearch"|id="m_target"|id="m_recognition"/);
 
+  const coreSource = await nativeFetch(`${base}/admin/drive-slides-v8-core.js`).then(response => response.text());
+  assert.match(coreSource, /id === 'products'/);
+  assert.match(coreSource, /maybeAutoSyncAllSlideMappings/);
+
   const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
   const currentRenderer = renderSource.match(/function renderCurrent\(\) \{[\s\S]*?\n\}\n\nfunction mappingCurrentInfo/)?.[0] || '';
   assert.match(currentRenderer, /campaign_name/);
