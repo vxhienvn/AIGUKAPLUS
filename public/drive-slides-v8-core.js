@@ -13,6 +13,9 @@ const state = {
   driveTree: [],
   driveTreeLoaded: false,
   driveTreePromise: null,
+  productAutoSyncStarted: false,
+  syncAllRunning: false,
+  syncAllPollToken: 0,
   folderSelections: { m_folders: new Set(), sm_folders: new Set() }
 };
 
@@ -40,6 +43,9 @@ function showTab(id, button) {
   document.querySelectorAll('.tab').forEach(element => element.classList.remove('active'));
   $('p-' + id)?.classList.add('active');
   (button || document.querySelector(`[data-tab="${id}"]`))?.classList.add('active');
+  if (id === 'products' && typeof maybeAutoSyncAllSlideMappings === 'function') {
+    maybeAutoSyncAllSlideMappings();
+  }
 }
 
 function adminHeaders() {
@@ -198,6 +204,9 @@ async function loadAll(showMessage = true) {
     await loadMeta(false);
     fillSelects();
     renderAll();
+    if ($('p-products')?.classList.contains('active') && typeof maybeAutoSyncAllSlideMappings === 'function') {
+      maybeAutoSyncAllSlideMappings();
+    }
     if (showMessage) status(state.metaError ? `Đã nạp Mapping; Meta chưa đồng bộ: ${state.metaError}` : 'Đã nạp dữ liệu Mapping mới nhất.', Boolean(state.metaError));
   } catch (error) {
     status(error.message, true);
