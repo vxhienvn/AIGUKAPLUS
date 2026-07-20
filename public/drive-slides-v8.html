@@ -13,11 +13,10 @@
   <section class="top">
     <div>
       <h1>Mapping Center V8</h1>
-      <div class="sub">Quản lý thống nhất <b>quảng cáo → nhóm sản phẩm → sản phẩm/catalog → Google Drive → slide</b>. Dữ liệu QC mới được lấy từ Meta và referral thực tế; Mapping cũ không tự áp vào QC mới.</div>
+      <div class="sub">Quản lý thống nhất <b>quảng cáo → nhóm sản phẩm → sản phẩm/catalog → Google Drive → slide</b>. Mapping cũ được đối chiếu về cùng folder ID; QC mới lấy trực tiếp từ các tài khoản quảng cáo/BM mà AIGUKA nhìn thấy.</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="/">Về bảng điều khiển</a>
-      <a class="btn ghost" href="/drive-slides-legacy" target="_blank">Drive/OAuth cũ</a>
       <button onclick="loadAll(true)">Làm mới dữ liệu</button>
       <button class="primary" onclick="syncMeta()">Đồng bộ QC từ Meta</button>
     </div>
@@ -46,12 +45,12 @@
     <div class="panel-body">
       <div class="notice">QC mới chưa Mapping sẽ <b>không bị ép sản phẩm</b>. Bot chỉ dùng lời khách hoặc hỏi lại cho đến khi bạn lưu Mapping.</div>
       <div class="toolbar">
-        <input id="currentSearch" placeholder="Tìm tên QC, Ad ID, Page..." oninput="renderCurrent()">
-        <select id="currentPage" onchange="renderCurrent()"><option value="">Tất cả Page</option></select>
+        <select id="currentBusiness" onchange="businessFilterChanged()"><option value="">Tất cả BM AIGUKA nhìn thấy</option></select>
+        <select id="currentAccount" onchange="renderCurrent()"><option value="">Tất cả tài khoản QC</option></select>
         <select id="currentState" onchange="renderCurrent()"><option value="">Tất cả trạng thái</option><option value="unmapped">Chưa Mapping</option><option value="mapped">Đã Mapping</option></select>
         <select id="currentSort" onchange="renderCurrent()"><option value="latest">Mới nhất</option><option value="customers">Nhiều khách nhất</option><option value="unmapped">Chưa Mapping trước</option></select>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Page / QC</th><th>Chiến dịch / Nhóm</th><th>Khách</th><th>Mapping hiện tại</th><th>Drive</th><th>Thao tác</th></tr></thead><tbody id="currentBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Tài khoản / QC</th><th>Chiến dịch / Nhóm</th><th>Khách</th><th>Mapping hiện tại</th><th>Drive</th><th>Thao tác</th></tr></thead><tbody id="currentBody"></tbody></table></div>
     </div>
   </section>
 
@@ -59,7 +58,7 @@
     <div class="panel-head"><h2>Toàn bộ Mapping QC</h2><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
     <div class="panel-body">
       <div class="toolbar"><input id="mappingSearch" placeholder="Tìm Ad ID, tên QC, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="current">QC đang phát sinh trước</option><option value="all">Tất cả kể cả cũ</option><option value="stale">Chỉ Mapping cũ</option></select></div>
-      <div class="table-wrap"><table><thead><tr><th>QC</th><th>Nhóm / Catalog</th><th>Loại</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>QC</th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
   </section>
 
@@ -94,8 +93,8 @@
   </section>
 
   <section id="p-legacy" class="panel">
-    <div class="panel-head"><h2>Kết nối Google Drive và chọn thư mục</h2><a class="btn" href="/drive-slides-legacy" target="_blank">Mở cửa sổ riêng</a></div>
-    <div class="iframe-wrap"><iframe src="/drive-slides-legacy" title="Google Drive legacy"></iframe></div>
+    <div class="panel-head"><h2>Kết nối Google Drive</h2><span class="muted">Đây là phần Drive/OAuth cũ, nay được dùng trực tiếp tại một nơi duy nhất.</span></div>
+    <div class="iframe-wrap"><iframe src="/drive-slides-legacy?tab=google" title="Kết nối Google Drive" onload="prepareDriveFrame(this)"></iframe></div>
   </section>
 
   <section id="p-log" class="panel">
@@ -109,14 +108,20 @@
   <div class="grid3">
     <div class="field"><label>Ad ID *</label><input id="m_ad_id" required></div>
     <div class="field"><label>Tên QC</label><input id="m_ad_name"></div>
+    <div class="field"><label>Tài khoản QC</label><input id="m_account_label" disabled></div>
     <div class="field"><label>Page</label><input id="m_page_name" disabled></div>
     <div class="field"><label>Campaign</label><input id="m_campaign_name"></div>
     <div class="field"><label>Adset</label><input id="m_adset_name"></div>
-    <div class="field"><label>Loại Mapping</label><select id="m_target"><option value="product">Sản phẩm cụ thể</option><option value="group">Nhóm sản phẩm</option><option value="scope">QC tổng hợp / phạm vi</option></select></div>
     <div class="field"><label>Nhóm sản phẩm</label><select id="m_group"></select></div>
     <div class="field"><label>Catalog / sản phẩm cụ thể</label><select id="m_catalog" onchange="suggestFoldersFromCatalog()"></select></div>
-    <div class="field"><label>Tên nhận diện</label><input id="m_recognition"></div>
-    <div class="field wide"><label>Thư mục Drive</label><select id="m_folders" multiple size="7"></select><div class="small muted">Giữ Ctrl để chọn nhiều thư mục. Có thể quản lý OAuth/thư mục mới ở tab Kết nối Google Drive.</div></div>
+    <div class="field wide"><div class="notice compact">Hệ thống tự xác định Mapping theo catalog, nhóm hoặc tập thư mục đã chọn; không cần chọn “loại/vai trò” thủ công.</div></div>
+    <div class="field wide"><label>Thư mục Drive — có thể chọn nhiều nhóm sản phẩm</label>
+      <div class="folder-picker-inline">
+        <div class="folder-picker-toolbar"><input id="m_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('m_folders')"><button type="button" onclick="selectVisibleFolders('m_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('m_folders')">Bỏ chọn</button><span id="m_folders_count" class="badge info">0 thư mục</span></div>
+        <div id="m_folders" class="folder-options"></div>
+      </div>
+      <div class="small muted">Tích trực tiếp từng thư mục; thư mục con được xếp ngay dưới thư mục cha. Quản lý kết nối ở tab Kết nối Google Drive.</div>
+    </div>
     <div class="field wide"><label>Ghi chú</label><textarea id="m_notes" rows="2"></textarea></div>
     <div class="field"><label><input type="checkbox" id="m_active" checked> Đang bật</label></div>
   </div>
@@ -131,7 +136,12 @@
   <div class="field"><label>Catalog/sản phẩm *</label><select id="sm_product" required onchange="fillSlideProductName()"></select></div>
   <div class="field"><label>Tên hiển thị</label><input id="sm_name"></div>
   <div class="field"><label>Page</label><select id="sm_page"><option value="">Tất cả Page</option></select></div>
-  <div class="field wide"><label>Thư mục Drive</label><select id="sm_folders" multiple size="8"></select></div>
+  <div class="field wide"><label>Thư mục Drive</label>
+    <div class="folder-picker-inline">
+      <div class="folder-picker-toolbar"><input id="sm_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('sm_folders')"><button type="button" onclick="selectVisibleFolders('sm_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('sm_folders')">Bỏ chọn</button><span id="sm_folders_count" class="badge info">0 thư mục</span></div>
+      <div id="sm_folders" class="folder-options"></div>
+    </div>
+  </div>
   <div class="field"><label>Ưu tiên</label><input id="sm_priority" type="number" value="100"></div>
   <div class="field"><label><input id="sm_active" type="checkbox" checked> Đang bật</label></div>
   <div class="field"><label><input id="sm_sync" type="checkbox"> Yêu cầu đồng bộ lại</label></div>
