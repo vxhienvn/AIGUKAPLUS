@@ -6,10 +6,10 @@ let source = fs.readFileSync(file, "utf8");
 const css = `.pancake-nav-card{margin:12px 0 4px;padding:11px;border:1px solid #334155;border-radius:10px;background:#111c31;color:#dce5f4}.pancake-nav-title{font-weight:800;margin-bottom:5px}.pancake-nav-note{font-size:11px;line-height:1.35;color:#aab6ca;margin-bottom:9px}.pancake-nav-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:700}.pancake-nav-switch input{width:38px;height:20px;accent-color:#22c55e}.pancake-nav-state{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#aab6ca}.pancake-nav-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}.pancake-nav-dot.on{background:#22c55e}.pancake-nav-dot.error{background:#ef4444}`;
 if (!source.includes(".pancake-nav-card")) source = source.replace("</style>", css + "</style>");
 
-const slidesNav = "${nav('/drive-slides','🖼 Mapping & Test Slide','drive-slides')}";
+const mappingNav = "${nav('/drive-slides','🖼 Mapping','drive-slides')}";
 const panel = `<div class="pancake-nav-card"><div class="pancake-nav-title">Nguồn bổ sung Pancake</div><div class="pancake-nav-note">Meta Business là nguồn chính. Chỉ bật Pancake để bù tag nhân viên và hội thoại Meta chưa kịp đồng bộ.</div><label class="pancake-nav-switch"><span>Bật Pancake</span><input id="pancake-global-toggle" type="checkbox"></label><div class="pancake-nav-state"><span id="pancake-global-dot" class="pancake-nav-dot"></span><span id="pancake-global-status">Đang tải trạng thái…</span></div></div>`;
-if (!source.includes(slidesNav)) throw new Error("V7_PANCAKE_NAV_ANCHOR_NOT_FOUND");
-if (!source.includes("pancake-global-toggle")) source = source.replace(slidesNav, slidesNav + panel);
+if (!source.includes(mappingNav)) throw new Error("V7_PANCAKE_NAV_ANCHOR_NOT_FOUND");
+if (!source.includes("pancake-global-toggle")) source = source.replace(mappingNav, mappingNav + panel);
 
 const script = `<script>(function(){
 const toggle=document.getElementById("pancake-global-toggle"),status=document.getElementById("pancake-global-status"),dot=document.getElementById("pancake-global-dot");
