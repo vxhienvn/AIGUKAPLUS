@@ -1,24 +1,37 @@
-const path = require('path');
+import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-module.exports = function registerMappingCenter(app) {
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(moduleDirectory, '..', '..');
+const publicDirectory = path.join(projectRoot, 'public');
+
+export function installMappingCenter(app, options = {}) {
     const SUPABASE_URL = String(
+        options.supabaseUrl ||
         process.env.SUPABASE_URL ||
         process.env.SUPABASE_PROJECT_URL ||
         process.env.NEXT_PUBLIC_SUPABASE_URL ||
         ''
     ).replace(/\/$/, '');
     const SUPABASE_KEY = String(
+        options.serviceRoleKey ||
         process.env.SUPABASE_SERVICE_ROLE_KEY ||
         process.env.SUPABASE_KEY ||
+        options.publishableKey ||
         process.env.SUPABASE_ANON_KEY ||
         ''
     );
     const MAPPING_ADMIN_KEY = String(
+        options.mappingAdminKey ||
         process.env.MAPPING_ADMIN_KEY ||
         process.env.ADMIN_KEY ||
         process.env.ADMIN_API_KEY ||
         ''
     );
+    const META_GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v23.0');
+    const jsonBody = express.json({ limit: '2mb' });
+    const metaAdsCache = { rows: [], loadedAt: 0 };
 
     function mappingApiReady() {
         return Boolean(SUPABASE_URL && SUPABASE_KEY);
@@ -67,12 +80,19 @@ module.exports = function registerMappingCenter(app) {
 
     function requireMappingWrite(req, res, next) {
         if (!MAPPING_ADMIN_KEY) {
-            // The legacy Railway admin page was already same-origin and did not have a
-            // dedicated mapping login. Keep compatibility, but reject cross-origin writes.
             const origin = String(req.get('origin') || '');
+            const referer = String(req.get('referer') || '');
             const host = String(req.get('host') || '');
-            if (origin && host && !origin.includes(host)) {
-                return res.status(403).json({ ok: false, error: 'Cross-origin mapping write is blocked.' });
+            const fetchSite = String(req.get('sec-fetch-site') || '').toLowerCase();
+            let sameOrigin = fetchSite === 'same-origin';
+            for (const candidate of [origin, referer]) {
+                if (!candidate || !host) continue;
+                try {
+                    sameOrigin ||= new URL(candidate).host === host;
+                } catch (_) { /* Ignore malformed optional headers. */ }
+            }
+            if (!sameOrigin) {
+                return res.status(403).json({ ok: false, error: 'Chỉ cho phép cập nhật Mapping từ trang quản trị AIGUKA.' });
             }
             return next();
         }
@@ -107,9 +127,10 @@ module.exports = function registerMappingCenter(app) {
         if (handlers.length) app.get('/drive-slides-legacy', ...handlers);
     }
 
-    app.get('/drive-slides', (req, res) => {
-        res.sendFile(path.join(__dirname, 'public', 'drive-slides-v8.html'));
-    });
+    for (const fileName of ['drive-slides-v8.css', 'drive-slides-v8-core.js', 'drive-slides-v8-render.js']) {
+        app.get(`/admin/${fileName}`, (_req, res) => res.sendFile(path.join(publicDirectory, fileName)));
+    }
+    app.get('/drive-slides', (_req, res) => res.sendFile(path.join(publicDirectory, 'drive-slides-v8.html')));
 
     function aggregateCurrentAds(referrals = [], mappings = []) {
         const mappingByAd = new Map((Array.isArray(mappings) ? mappings : []).map(row => [String(row.ad_id || ''), row]));
@@ -188,12 +209,138 @@ module.exports = function registerMappingCenter(app) {
         };
     }
 
+    function mergeConfiguredFolders(assetSummary, catalogs = [], slideMappings = []) {
+        const folders = new Map((assetSummary.folders || []).map(row => [String(row.folder_id || ''), row]));
+        const addFolder = (value, fallback = {}) => {
+            const id = String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || '')).trim();
+            if (!id) return;
+            const current = folders.get(id) || {
+                folder_id: id,
+                folder_name: fallback.folder_name || value?.name || value?.path || id,
+                folder_url: fallback.folder_url || value?.url || `https://drive.google.com/drive/folders/${id}`,
+                images: 0,
+                catalogs: []
+            };
+            const catalogKey = String(fallback.catalog_key || '').trim();
+            current.catalogs = [...new Set([...(current.catalogs || []), ...(catalogKey ? [catalogKey] : [])])];
+            folders.set(id, current);
+        };
+        for (const catalog of Array.isArray(catalogs) ? catalogs : []) {
+            addFolder(catalog.drive_folder_id, {
+                folder_name: catalog.folder_path || catalog.catalog_name,
+                folder_url: catalog.drive_folder_url,
+                catalog_key: catalog.catalog_key
+            });
+        }
+        for (const mapping of Array.isArray(slideMappings) ? slideMappings : []) {
+            const configured = Array.isArray(mapping.drive_folder_ids) ? mapping.drive_folder_ids : [];
+            for (const folder of configured) addFolder(folder, { catalog_key: mapping.product_key });
+            addFolder(mapping.drive_folder_id, {
+                folder_name: mapping.product_name,
+                folder_url: mapping.drive_folder_url,
+                catalog_key: mapping.product_key
+            });
+        }
+        assetSummary.folders = [...folders.values()].sort((a, b) => String(a.folder_name).localeCompare(String(b.folder_name), 'vi'));
+        return assetSummary;
+    }
+
+    function metaRootToken() {
+        return String(
+            process.env.META_ACCESS_TOKEN ||
+            process.env.META_USER_ACCESS_TOKEN ||
+            process.env.FACEBOOK_USER_ACCESS_TOKEN ||
+            process.env.USER_ACCESS_TOKEN ||
+            ''
+        ).trim();
+    }
+
+    async function metaJson(url) {
+        const response = await fetch(url, { signal: AbortSignal.timeout(30000), cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.error) {
+            const error = new Error(data?.error?.message || `Meta HTTP ${response.status}`);
+            error.status = response.status;
+            throw error;
+        }
+        return data;
+    }
+
+    async function metaPages(url, maxPages = 20) {
+        const rows = [];
+        let next = url;
+        let page = 0;
+        while (next && page < maxPages) {
+            const data = await metaJson(next);
+            rows.push(...(Array.isArray(data?.data) ? data.data : []));
+            next = data?.paging?.next || '';
+            page += 1;
+        }
+        return rows;
+    }
+
+    function configuredAdAccountIds() {
+        return [...new Set(String(
+            process.env.META_AD_ACCOUNT_IDS ||
+            process.env.META_AD_ACCOUNTS ||
+            process.env.META_AD_ACCOUNT_ID ||
+            ''
+        ).split(/[;,\s]+/).map(value => value.replace(/^act_/, '').trim()).filter(Boolean))];
+    }
+
+    async function fetchCurrentMetaAds(force = false) {
+        if (!force && metaAdsCache.rows.length && Date.now() - metaAdsCache.loadedAt < 180000) return metaAdsCache.rows;
+        const token = metaRootToken();
+        if (!token) {
+            const error = new Error('Chưa có kết nối Meta để đồng bộ danh sách quảng cáo.');
+            error.status = 503;
+            throw error;
+        }
+        let accountIds = configuredAdAccountIds();
+        const accountNames = new Map();
+        if (!accountIds.length) {
+            const accountUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/adaccounts?fields=id,account_id,name,account_status&limit=200&access_token=${encodeURIComponent(token)}`;
+            const accounts = await metaPages(accountUrl, 5);
+            accountIds = accounts.map(row => String(row.account_id || row.id || '').replace(/^act_/, '')).filter(Boolean);
+            for (const row of accounts) accountNames.set(String(row.account_id || row.id || '').replace(/^act_/, ''), row.name || '');
+        }
+        const batches = await Promise.all(accountIds.map(async accountId => {
+            const fields = 'id,name,status,effective_status,configured_status,account_id,campaign{id,name},adset{id,name,promoted_object}';
+            const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/act_${encodeURIComponent(accountId)}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${encodeURIComponent(token)}`;
+            try {
+                const ads = await metaPages(url, 10);
+                return ads.map(ad => ({
+                    ad_id: String(ad.id || ''),
+                    ad_name: ad.name || '',
+                    ad_account_id: String(ad.account_id || accountId).replace(/^act_/, ''),
+                    ad_account_name: accountNames.get(String(ad.account_id || accountId).replace(/^act_/, '')) || '',
+                    campaign_id: String(ad.campaign?.id || ''),
+                    campaign_name: ad.campaign?.name || '',
+                    adset_id: String(ad.adset?.id || ''),
+                    adset_name: ad.adset?.name || '',
+                    page_id: String(ad.adset?.promoted_object?.page_id || ''),
+                    status: ad.status || '',
+                    effective_status: ad.effective_status || '',
+                    configured_status: ad.configured_status || ''
+                }));
+            } catch (error) {
+                console.warn(`[MAPPING_CENTER] Meta account ${accountId}:`, error.message);
+                return [];
+            }
+        }));
+        const visibleStatuses = new Set(['ACTIVE', 'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED']);
+        const rows = batches.flat().filter(row => row.ad_id && visibleStatuses.has(String(row.effective_status || row.status || '').toUpperCase()));
+        metaAdsCache.rows = rows;
+        metaAdsCache.loadedAt = Date.now();
+        return rows;
+    }
+
     app.get('/api/v8-mapping-center/bootstrap', async (req, res) => {
         try {
             const days = Math.min(Math.max(Number(req.query.days || 45), 7), 180);
             const since = new Date(Date.now() - days * 86400000).toISOString();
             const queries = await Promise.all([
-                safeSupabaseRest('v8_pages?select=page_id,page_name,is_active,runtime_mode&order=page_name.asc'),
+                safeSupabaseRest('v8_pages?select=page_id,page_name,is_active&order=page_name.asc'),
                 safeSupabaseRest('v8_mapping_runtime?select=*&order=page_id.asc'),
                 safeSupabaseRest('v8_business_product_groups?select=group_key,group_name,priority,is_active&is_active=eq.true&order=priority.asc'),
                 safeSupabaseRest('v8_product_catalog?select=catalog_key,catalog_name,parent_key,root_product_key,drive_folder_id,drive_folder_url,folder_path,level_no,is_sendable,is_active&is_active=eq.true&order=level_no.asc,catalog_name.asc'),
@@ -204,7 +351,7 @@ module.exports = function registerMappingCenter(app) {
                 safeSupabaseRest("v8_admin_change_log?select=*&or=(asset_type.ilike.*mapping*,action.ilike.*mapping*)&order=created_at.desc&limit=50")
             ]);
             const [pages, runtime, groups, catalogs, mappings, slideMappings, referrals, assets, changeLog] = queries;
-            const assetSummary = aggregateAssets(assets.data);
+            const assetSummary = mergeConfiguredFolders(aggregateAssets(assets.data), catalogs.data, slideMappings.data);
             const currentAds = aggregateCurrentAds(referrals.data, mappings.data);
             const mappedCurrent = currentAds.filter(row => row.mapped).length;
             res.json({
@@ -236,7 +383,17 @@ module.exports = function registerMappingCenter(app) {
         }
     });
 
-    app.post('/api/v8-mapping-center/ad-mapping', requireMappingWrite, async (req, res) => {
+    app.get('/api/ad-mapping/meta', async (req, res) => {
+        try {
+            const force = String(req.query.sync || '') === '1';
+            const rows = await fetchCurrentMetaAds(force);
+            res.json({ ok: true, rows, synced_at: new Date(metaAdsCache.loadedAt).toISOString(), source: 'meta_graph' });
+        } catch (error) {
+            res.status(error.status || 502).json({ ok: false, error: error.message });
+        }
+    });
+
+    app.post('/api/v8-mapping-center/ad-mapping', jsonBody, requireMappingWrite, async (req, res) => {
         try {
             const input = req.body || {};
             const adId = String(input.ad_id || '').trim();
@@ -296,7 +453,7 @@ module.exports = function registerMappingCenter(app) {
         }
     });
 
-    app.post('/api/v8-mapping-center/ad-mapping/disable', requireMappingWrite, async (req, res) => {
+    app.post('/api/v8-mapping-center/ad-mapping/disable', jsonBody, requireMappingWrite, async (req, res) => {
         try {
             const adId = String(req.body?.ad_id || '').trim();
             if (!adId) return res.status(400).json({ ok: false, error: 'Thiếu Ad ID.' });
@@ -311,7 +468,7 @@ module.exports = function registerMappingCenter(app) {
         }
     });
 
-    app.post('/api/v8-mapping-center/runtime', requireMappingWrite, async (req, res) => {
+    app.post('/api/v8-mapping-center/runtime', jsonBody, requireMappingWrite, async (req, res) => {
         try {
             const pageId = String(req.body?.page_id || '').trim();
             const mode = String(req.body?.mode || 'OBSERVE').toUpperCase();
@@ -338,7 +495,7 @@ module.exports = function registerMappingCenter(app) {
         }
     });
 
-    app.post('/api/v8-mapping-center/slide-mapping', requireMappingWrite, async (req, res) => {
+    app.post('/api/v8-mapping-center/slide-mapping', jsonBody, requireMappingWrite, async (req, res) => {
         try {
             const input = req.body || {};
             const productKey = String(input.product_key || '').trim();
@@ -395,7 +552,7 @@ module.exports = function registerMappingCenter(app) {
         return result;
     }
 
-    app.post('/api/v8-mapping-center/test', async (req, res) => {
+    app.post('/api/v8-mapping-center/test', jsonBody, async (req, res) => {
         try {
             const body = req.body || {};
             const pageId = String(body.page_id || '').trim();
@@ -444,4 +601,6 @@ module.exports = function registerMappingCenter(app) {
         });
     });
 
-};
+}
+
+export default installMappingCenter;
