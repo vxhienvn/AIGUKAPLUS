@@ -133,4 +133,40 @@ test('Drive V4 đọc đúng cây cha-con, đếm ảnh đệ quy và đồng b�
   assert.equal(new Set(assets.map(asset => asset.parent_folder_id)).size, 4);
   assert.ok(assets.every(asset => asset.metadata.folder_path.startsWith('Quạt trần 5-6 cánh / Nhóm')));
   assert.ok(assets.every(asset => asset.metadata.folder_parent_id === 'f56'));
+
+  const waitForSyncAll = async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const snapshot = await nativeFetch(`${base}/api/slide-manager/drive/sync-all/status`).then(response => response.json());
+      if (!snapshot.running) return snapshot;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    throw new Error('SYNC_ALL_TIMEOUT');
+  };
+
+  const automatic = await nativeFetch(`${base}/api/slide-manager/drive/sync-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: false, stale_after_minutes: 15 })
+  });
+  assert.equal(automatic.status, 202);
+  const automaticDone = await waitForSyncAll();
+  assert.equal(automaticDone.total, 0);
+  assert.equal(automaticDone.skipped, 1);
+  assert.equal(automaticDone.mappings_synced, 0);
+  assert.deepEqual(automaticDone.errors, []);
+
+  const forced = await nativeFetch(`${base}/api/slide-manager/drive/sync-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: true })
+  });
+  assert.equal(forced.status, 202);
+  const forcedDone = await waitForSyncAll();
+  assert.equal(forcedDone.total, 1);
+  assert.equal(forcedDone.completed, 1);
+  assert.equal(forcedDone.mappings_synced, 1);
+  assert.equal(forcedDone.images_synced, 10);
+  assert.equal(forcedDone.folders_scanned, 5);
+  assert.deepEqual(forcedDone.errors, []);
+  assert.equal(assets.length, 10);
 });

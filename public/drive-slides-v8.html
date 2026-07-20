@@ -59,14 +59,14 @@
     <div class="panel-body">
       <div class="notice warning compact"><b>“Chưa chọn thư mục Drive”</b> là Mapping cũ đã có tên QC nhưng chưa có nhóm sản phẩm, catalog hoặc thư mục nguồn. Bot chưa có nguồn ảnh riêng cho QC đó; bấm <b>Sửa</b> để chọn phạm vi.</div>
       <div class="toolbar"><input id="mappingSearch" placeholder="Tìm Ad ID, tên QC, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="current">QC đang phát sinh trước</option><option value="all">Tất cả kể cả cũ</option><option value="stale">Chỉ Mapping cũ</option></select></div>
-      <div class="table-wrap"><table><thead><tr><th>QC</th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Chiến dịch / Nhóm quảng cáo</th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
   </section>
 
   <section id="p-products" class="panel">
-    <div class="panel-head"><h2>Mapping sản phẩm → Google Drive</h2><button class="primary" onclick="openSlideMapping({})">+ Thêm sản phẩm/Drive</button></div>
+    <div class="panel-head"><h2>Mapping sản phẩm → Google Drive</h2><div class="row-actions"><button id="syncAllProducts" onclick="syncAllSlideMappings(true)">Đồng bộ tất cả</button><button class="primary" onclick="openSlideMapping({})">+ Thêm sản phẩm/Drive</button></div></div>
     <div class="panel-body">
-      <div class="notice warning">Thiếu ảnh đúng catalog thì Bot trả <b>missing_assets</b>, không được lấy ảnh sản phẩm khác thay thế.</div>
+      <div class="notice warning">Thiếu ảnh đúng catalog thì Bot trả <b>missing_assets</b>, không được lấy ảnh sản phẩm khác thay thế.</div><div id="syncAllProductsStatus" class="small muted" style="margin:0 0 12px"></div>
       <div class="toolbar"><input id="productSearch" placeholder="Tìm sản phẩm, catalog, folder..." oninput="renderProducts()"></div>
       <div class="table-wrap"><table><thead><tr><th>Sản phẩm / Catalog</th><th>Page</th><th>Thư mục đã gán</th><th>Số ảnh hiện có</th><th>Đồng bộ</th><th>Thao tác</th></tr></thead><tbody id="productBody"></tbody></table></div>
     </div>

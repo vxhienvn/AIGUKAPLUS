@@ -394,38 +394,194 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
     try { await db(`v8_slide_mapping?id=eq.${encodeURIComponent(req.params.id)}`, { method: "DELETE" }); res.json({ ok: true }); }
     catch (error) { res.status(400).json({ ok: false, error: error.message }); }
   });
+  const syncAllState = {
+    running: false,
+    started_at: null,
+    finished_at: null,
+    force: false,
+    stale_after_minutes: 15,
+    total: 0,
+    completed: 0,
+    skipped: 0,
+    mappings_synced: 0,
+    images_synced: 0,
+    folders_scanned: 0,
+    errors: []
+  };
+  const syncAllSnapshot = () => ({ ...syncAllState, errors: [...syncAllState.errors] });
+  const foldersForMapping = (mapping) => {
+    const rawFolders = Array.isArray(mapping?.drive_folder_ids) && mapping.drive_folder_ids.length
+      ? mapping.drive_folder_ids
+      : [{ id: mapping?.drive_folder_id, name: mapping?.product_name, path: mapping?.product_name }];
+    return uniqueBy(rawFolders.map(folderRef).filter((item) => item.id), (item) => item.id);
+  };
+  const markMappingSyncError = async (mappingId, error) => {
+    if (!mappingId) return;
+    await db(`v8_slide_mapping?id=eq.${encodeURIComponent(mappingId)}`, {
+      method: "PATCH",
+      body: { sync_status: "error", sync_error: error.message }
+    }).catch(() => {});
+  };
+  const syncDriveMapping = async (row, mapping) => {
+    const mappingId = clean(mapping?.id);
+    if (!mappingId) throw new Error("Mapping không có ID");
+    const folders = foldersForMapping(mapping);
+    if (!folders.length) throw new Error("Mapping chưa chọn thư mục Drive");
+    let foldersScanned = 0;
+    const collected = [];
+    for (const folder of folders) {
+      const scan = await listImagesRecursive(row, folder.id, 7, folder.path || folder.name || mapping.product_name);
+      foldersScanned += scan.folders_scanned;
+      for (const item of scan.images) {
+        collected.push({
+          ...item,
+          selected_root_id: folder.id,
+          selected_root_name: folder.name,
+          selected_root_path: folder.path
+        });
+      }
+    }
+    const images = uniqueBy(collected, (item) => item.id);
+    let count = 0;
+    for (const [index, item] of images.entries()) {
+      const existing = await db(`v8_drive_assets?drive_file_id=eq.${encodeURIComponent(item.id)}&select=id,metadata&limit=1`);
+      const assetRow = {
+        product_key: mapping.product_key,
+        product_name: mapping.product_name,
+        catalog_key: mapping.product_key,
+        root_folder_url: `https://drive.google.com/drive/folders/${item.selected_root_id}`,
+        parent_folder_id: item.parent_folder_id || item.selected_root_id,
+        parent_folder_name: item.parent_folder_name || item.selected_root_name || mapping.product_name || "",
+        parent_folder_url: `https://drive.google.com/drive/folders/${item.parent_folder_id || item.selected_root_id}`,
+        drive_file_id: item.id,
+        file_name: item.name,
+        mime_type: item.mimeType,
+        file_url: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
+        delivery_url: `https://drive.google.com/uc?export=view&id=${item.id}`,
+        file_size: item.size ? Number(item.size) : null,
+        created_time: item.createdTime || null,
+        modified_time: item.modifiedTime || null,
+        sort_order: index + 1,
+        is_image: true,
+        is_active: true,
+        last_seen_at: new Date().toISOString(),
+        deleted_from_drive_at: null,
+        metadata: {
+          ...(existing?.[0]?.metadata && typeof existing[0].metadata === "object" ? existing[0].metadata : {}),
+          catalog_key: mapping.product_key,
+          folder_path: item.parent_folder_path || item.selected_root_path || item.selected_root_name || mapping.product_name,
+          folder_parent_id: item.parent_folder_parent_id || null,
+          selected_root_folder_id: item.selected_root_id,
+          selected_root_folder_path: item.selected_root_path || item.selected_root_name || mapping.product_name
+        }
+      };
+      if (existing?.[0]?.id) {
+        await db(`v8_drive_assets?id=eq.${encodeURIComponent(existing[0].id)}`, { method: "PATCH", body: assetRow });
+      } else {
+        await db("v8_drive_assets", { method: "POST", body: assetRow });
+      }
+      count++;
+    }
+    await db(`v8_slide_mapping?id=eq.${encodeURIComponent(mappingId)}`, {
+      method: "PATCH",
+      body: { sync_status: "success", last_synced_at: new Date().toISOString(), sync_error: null }
+    });
+    return {
+      mapping_id: mappingId,
+      product_key: mapping.product_key,
+      product_name: mapping.product_name,
+      synced: count,
+      selected_folders: folders.length,
+      folders_scanned: foldersScanned,
+      total_items: images.length
+    };
+  };
+
   router.post("/drive/sync", async (req, res) => {
+    const mappingId = clean(req.body?.mapping_id);
     try {
       const row = await getConnection();
-      const mappingId = clean(req.body?.mapping_id);
       const mapping = (await db(`v8_slide_mapping?id=eq.${encodeURIComponent(mappingId)}&select=*&limit=1`))?.[0];
       if (!mapping) throw new Error("Không tìm thấy mapping");
-      const rawFolders = Array.isArray(mapping.drive_folder_ids) && mapping.drive_folder_ids.length ? mapping.drive_folder_ids : [{ id: mapping.drive_folder_id, name: mapping.product_name, path: mapping.product_name }];
-      const folders = uniqueBy(rawFolders.map(folderRef).filter((item) => item.id), (item) => item.id);
-      if (!folders.length) throw new Error("Mapping chưa chọn thư mục Drive");
-      let foldersScanned = 0;
-      const collected = [];
-      for (const folder of folders) {
-        const scan = await listImagesRecursive(row, folder.id, 7, folder.path || folder.name || mapping.product_name);
-        foldersScanned += scan.folders_scanned;
-        for (const item of scan.images) collected.push({ ...item, selected_root_id: folder.id, selected_root_name: folder.name, selected_root_path: folder.path });
-      }
-      const images = uniqueBy(collected, (item) => item.id);
-      let count = 0;
-      for (const [index, item] of images.entries()) {
-        const existing = await db(`v8_drive_assets?drive_file_id=eq.${encodeURIComponent(item.id)}&select=id,metadata&limit=1`);
-        const assetRow = { product_key: mapping.product_key, product_name: mapping.product_name, catalog_key: mapping.product_key, root_folder_url: `https://drive.google.com/drive/folders/${item.selected_root_id}`, parent_folder_id: item.parent_folder_id || item.selected_root_id, parent_folder_name: item.parent_folder_name || item.selected_root_name || mapping.product_name || "", parent_folder_url: `https://drive.google.com/drive/folders/${item.parent_folder_id || item.selected_root_id}`, drive_file_id: item.id, file_name: item.name, mime_type: item.mimeType, file_url: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`, delivery_url: `https://drive.google.com/uc?export=view&id=${item.id}`, file_size: item.size ? Number(item.size) : null, created_time: item.createdTime || null, modified_time: item.modifiedTime || null, sort_order: index + 1, is_image: true, is_active: true, last_seen_at: new Date().toISOString(), deleted_from_drive_at: null, metadata: { ...(existing?.[0]?.metadata && typeof existing[0].metadata === "object" ? existing[0].metadata : {}), catalog_key: mapping.product_key, folder_path: item.parent_folder_path || item.selected_root_path || item.selected_root_name || mapping.product_name, folder_parent_id: item.parent_folder_parent_id || null, selected_root_folder_id: item.selected_root_id, selected_root_folder_path: item.selected_root_path || item.selected_root_name || mapping.product_name } };
-        if (existing?.[0]?.id) await db(`v8_drive_assets?id=eq.${encodeURIComponent(existing[0].id)}`, { method: "PATCH", body: assetRow });
-        else await db("v8_drive_assets", { method: "POST", body: assetRow });
-        count++;
-      }
-      await db(`v8_slide_mapping?id=eq.${encodeURIComponent(mappingId)}`, { method: "PATCH", body: { sync_status: "success", last_synced_at: new Date().toISOString(), sync_error: null } });
-      res.json({ ok: true, synced: count, selected_folders: folders.length, folders_scanned: foldersScanned, total_items: images.length });
+      const result = await syncDriveMapping(row, mapping);
+      res.json({ ok: true, ...result });
     } catch (error) {
-      if (req.body?.mapping_id) await db(`v8_slide_mapping?id=eq.${encodeURIComponent(req.body.mapping_id)}`, { method: "PATCH", body: { sync_status: "error", sync_error: error.message } }).catch(() => {});
+      await markMappingSyncError(mappingId, error);
       res.status(400).json({ ok: false, error: error.message });
     }
   });
+
+  const runSyncAll = async ({ force, staleAfterMinutes }) => {
+    const row = await getConnection();
+    const mappings = await db("v8_slide_mapping?select=*&is_active=eq.true&order=priority.asc,product_name.asc");
+    const syncable = (Array.isArray(mappings) ? mappings : []).filter((mapping) =>
+      mapping?.is_active !== false && foldersForMapping(mapping).length
+    );
+    const cutoff = Date.now() - staleAfterMinutes * 60000;
+    const queue = syncable.filter((mapping) => {
+      if (force) return true;
+      const lastSynced = Date.parse(mapping.last_synced_at || "");
+      return String(mapping.sync_status || "").toLowerCase() !== "success"
+        || !Number.isFinite(lastSynced)
+        || lastSynced < cutoff;
+    });
+    syncAllState.total = queue.length;
+    syncAllState.skipped = syncable.length - queue.length;
+    for (const mapping of queue) {
+      try {
+        const result = await syncDriveMapping(row, mapping);
+        syncAllState.mappings_synced += 1;
+        syncAllState.images_synced += Number(result.synced || 0);
+        syncAllState.folders_scanned += Number(result.folders_scanned || 0);
+      } catch (error) {
+        await markMappingSyncError(clean(mapping?.id), error);
+        syncAllState.errors.push({
+          mapping_id: clean(mapping?.id),
+          product_key: clean(mapping?.product_key),
+          product_name: clean(mapping?.product_name),
+          error: error.message
+        });
+      } finally {
+        syncAllState.completed += 1;
+      }
+    }
+    syncAllState.running = false;
+    syncAllState.finished_at = new Date().toISOString();
+  };
+
+  router.post("/drive/sync-all", async (req, res) => {
+    if (syncAllState.running) {
+      res.status(202).json({ ok: true, started: false, ...syncAllSnapshot() });
+      return;
+    }
+    const force = req.body?.force === true;
+    const staleAfterMinutes = Math.min(Math.max(Number(req.body?.stale_after_minutes || 15), 1), 1440);
+    Object.assign(syncAllState, {
+      running: true,
+      started_at: new Date().toISOString(),
+      finished_at: null,
+      force,
+      stale_after_minutes: staleAfterMinutes,
+      total: 0,
+      completed: 0,
+      skipped: 0,
+      mappings_synced: 0,
+      images_synced: 0,
+      folders_scanned: 0,
+      errors: []
+    });
+    void runSyncAll({ force, staleAfterMinutes }).catch((error) => {
+      syncAllState.running = false;
+      syncAllState.finished_at = new Date().toISOString();
+      syncAllState.errors.push({ error: error.message });
+    });
+    res.status(202).json({ ok: true, started: true, ...syncAllSnapshot() });
+  });
+
+  router.get("/drive/sync-all/status", (_req, res) => {
+    res.json({ ok: true, ...syncAllSnapshot() });
+  });
+
   router.get("/image/:id", async (req, res) => {
     try {
       const asset = (await db(`v8_drive_assets?id=eq.${encodeURIComponent(req.params.id)}&select=*&limit=1`))?.[0];

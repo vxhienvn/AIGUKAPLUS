@@ -5,6 +5,45 @@ function mappingFolderIds(mapping) {
   return [...new Set((Array.isArray(preferred) ? preferred : []).map(value => String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || ''))).filter(Boolean))];
 }
 
+function statusDotHtml(value, customLabel = '') {
+  const statusValue = String(value || '').trim().toUpperCase();
+  const active = new Set(['ACTIVE', 'SUCCESS', 'CONNECTED', 'CATALOG']);
+  const waiting = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'REQUESTED', 'IDLE']);
+  const stopped = new Set(['OFF', 'DISABLED', 'DISAPPROVED', 'WITH_ISSUES', 'ERROR', 'FAILED']);
+  const tone = active.has(statusValue) ? 'live' : (waiting.has(statusValue) ? 'waiting' : (stopped.has(statusValue) ? 'stopped' : 'unknown'));
+  const labels = {
+    ACTIVE: 'Đang hoạt động',
+    SUCCESS: 'Đã đồng bộ',
+    CONNECTED: 'Đã kết nối',
+    CATALOG: 'Theo catalog',
+    PAUSED: 'Đang tạm dừng',
+    CAMPAIGN_PAUSED: 'Chiến dịch đang tạm dừng',
+    ADSET_PAUSED: 'Nhóm quảng cáo đang tạm dừng',
+    PENDING_REVIEW: 'Đang chờ duyệt',
+    IN_PROCESS: 'Đang xử lý',
+    PREAPPROVED: 'Đã duyệt trước',
+    REQUESTED: 'Đang chờ đồng bộ',
+    IDLE: 'Chưa đồng bộ',
+    OFF: 'Đã tắt',
+    DISABLED: 'Đã tắt',
+    DISAPPROVED: 'Không được duyệt',
+    WITH_ISSUES: 'Có lỗi',
+    ERROR: 'Có lỗi',
+    FAILED: 'Thất bại'
+  };
+  const label = customLabel || labels[statusValue] || 'Chưa rõ trạng thái';
+  return `<span class="status-dot ${tone}" title="${esc(label)}" aria-label="${esc(label)}"></span>`;
+}
+
+function compactFolderHtml(ids, detailBuilder) {
+  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean))];
+  if (!uniqueIds.length) return '';
+  const details = uniqueIds.map(id => detailBuilder(id));
+  if (uniqueIds.length === 1) return details[0];
+  const firstName = folderName(uniqueIds[0]);
+  return `<details class="folder-disclosure" ontoggle="this.querySelector('.folder-toggle-label').textContent=this.open?'Thu gọn':'Mở rộng'"><summary><span class="folder-summary-label">📁 ${esc(firstName)} <span class="small muted">+${uniqueIds.length - 1}</span></span><span class="folder-toggle-label">Mở rộng</span></summary><div class="folder-details">${details.join('')}</div></details>`;
+}
+
 function mappingScope(mapping) {
   if (!mapping) return { title: 'Chưa chọn', detail: '' };
   if (mapping.product_item_key) {
@@ -55,7 +94,7 @@ function folderListHtml(mapping) {
     return `<span class="badge info">Theo phạm vi sản phẩm</span><div class="small muted">${esc(scope.title)}</div>`;
   }
   const warning = mapping?.folder_sync_status === 'partial' ? '<div class="badge warn">Có đường dẫn cũ chưa đối chiếu được</div>' : '';
-  return ids.map(id => `<div class="small">📁 ${esc(folderName(id))}</div>`).join('') + warning;
+  return compactFolderHtml(ids, id => `<div class="small folder-detail-row">📁 ${esc(folderName(id))}</div>`) + warning;
 }
 
 function renderCurrent() {
@@ -65,8 +104,10 @@ function renderCurrent() {
   for (const row of rows) {
     const campaign = row.campaign_name || row.mapping?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
     const adset = row.adset_name || row.mapping?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
+    const effectiveStatus = row.effective_status || row.status || row.mapping?.effective_status || '';
+    const statusDot = statusDotHtml(effectiveStatus);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><b>${esc(campaign)}</b><div class="small muted">${esc(adset)}</div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
+    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
     body.appendChild(tr);
   }
 }
@@ -76,7 +117,7 @@ function mappingCurrentInfo(adId) { return state.currentAds.find(row => String(r
 function renderMappings() {
   const query = $('mappingSearch').value.toLocaleLowerCase('vi-VN').trim();
   const mode = $('mappingAge').value;
-  let rows = state.mappings.filter(mapping => !query || [mapping.ad_id, mapping.ad_name, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  let rows = state.mappings.filter(mapping => !query || [mapping.ad_id, mapping.ad_name, mapping.campaign_name, mapping.adset_name, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN').includes(query));
   rows = rows.filter(mapping => {
     const current = mappingCurrentInfo(mapping.ad_id);
     return mode === 'all' || (mode === 'current' ? Boolean(current) : !current);
@@ -85,9 +126,13 @@ function renderMappings() {
   body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có Mapping phù hợp.</td></tr>';
   for (const mapping of rows) {
     const current = mappingCurrentInfo(mapping.ad_id);
+    const campaign = mapping.campaign_name || current?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
+    const adset = mapping.adset_name || current?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
+    const effectiveStatus = current?.effective_status || current?.status || mapping.effective_status || (mapping.is_active === false ? 'OFF' : '');
+    const statusDot = statusDotHtml(effectiveStatus);
     const scope = mappingScope(mapping);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><b>${esc(mapping.ad_name || current?.ad_title || '-')}</b><div class="id">${esc(mapping.ad_id)}</div><div class="small muted">${esc(mapping.ad_account_name || mapping.ad_account_id || '')}</div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${current ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
+    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${current ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
     body.appendChild(tr);
   }
 }
@@ -138,7 +183,7 @@ function syncStatusHtml(mapping, syncedCount) {
   if (mapping._catalog_only) return '<span class="badge info">Theo catalog</span>';
   const statusValue = String(mapping.sync_status || 'idle').toLowerCase();
   if (statusValue === 'success') return `<span class="badge ok">Đã đồng bộ</span><div class="small muted">${fmtDate(mapping.last_synced_at)}</div>`;
-  if (statusValue === 'error') return `<span class="badge bad">Đồng bộ lỗi</span><div class="small warn-text">${esc(mapping.sync_error || 'Bấm Đồng bộ ngay để thử lại')}</div>`;
+  if (statusValue === 'error') return `<span class="badge bad">Đồng bộ lỗi</span><div class="small warn-text">${esc(mapping.sync_error || 'Bấm Đồng bộ tất cả để thử lại')}</div>`;
   if (statusValue === 'requested') return '<span class="badge warn">Đang chờ đồng bộ</span>';
   return `<span class="badge warn">Chưa đồng bộ</span><div class="small muted">${syncedCount} ảnh Bot đang dùng</div>`;
 }
@@ -178,8 +223,18 @@ function renderProducts() {
     const countDetail = live.available ? `<div class="small muted">Drive: ${live.images} · Bot đã đồng bộ: ${syncedCount}</div>` : `<div class="small muted">${syncedCount} ảnh Bot đã đồng bộ</div>`;
     const action = mapping._catalog_only
       ? `<button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Tạo Mapping</button>`
-      : `<div class="row-actions"><button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Sửa</button><button class="primary" onclick='syncSlideMapping(${JSON.stringify(String(mapping.id))})'>Đồng bộ ngay</button></div>`;
-    tr.innerHTML = `<td><b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${ids.length ? ids.map(id => { const folder = state.folders.find(row => String(row.folder_id) === String(id)); const total = Number(folder?.images ?? folder?.total_images ?? folder?.direct_images ?? 0); const direct = Number(folder?.direct_images ?? total); return `<div>📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${total} ảnh tổng · ${direct} trực tiếp)</span></div>`; }).join('') : '<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${shownCount}</b>${shownCount ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}${countDetail}</td><td>${syncStatusHtml(mapping, syncedCount)}</td><td>${action}</td>`;
+      : `<button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Sửa</button>`;
+    const productStatus = mapping.is_active === false ? 'OFF' : (mapping._catalog_only ? 'CATALOG' : (mapping.sync_status || 'IDLE'));
+    const productStatusLabel = mapping.is_active === false ? 'Mapping đã tắt' : (mapping._catalog_only ? 'Đang dùng catalog' : '');
+    const folderHtml = ids.length
+      ? compactFolderHtml(ids, id => {
+          const folder = state.folders.find(row => String(row.folder_id) === String(id));
+          const total = Number(folder?.images ?? folder?.total_images ?? folder?.direct_images ?? 0);
+          const direct = Number(folder?.direct_images ?? total);
+          return `<div class="folder-detail-row">📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${total} ảnh tổng · ${direct} trực tiếp)</span></div>`;
+        })
+      : '<span class="badge bad">Chưa gán thư mục</span>';
+    tr.innerHTML = `<td><div class="status-title">${statusDotHtml(productStatus, productStatusLabel)}<b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b></div><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${folderHtml}</td><td><b>${shownCount}</b>${shownCount ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}${countDetail}</td><td>${syncStatusHtml(mapping, syncedCount)}</td><td>${action}</td>`;
     body.appendChild(tr);
   }
 }
@@ -365,21 +420,73 @@ async function saveSlideMapping(event) {
   }
 }
 
-async function syncSlideMapping(mappingId) {
-  busy(true);
-  try {
-    const result = await api('/api/slide-manager/drive/sync', {
-      method: 'POST',
-      body: JSON.stringify({ mapping_id: mappingId })
-    });
-    await loadAll(false);
-    status(`Đã quét ${result.folders_scanned || 0} thư mục và đồng bộ ${result.synced || 0} ảnh cho Bot.`);
-  } catch (error) {
-    await loadAll(false).catch(() => {});
-    status(`Đồng bộ Drive lỗi: ${error.message}`, true);
-  } finally {
-    busy(false);
+function syncAllUi(snapshot = {}) {
+  const button = $('syncAllProducts');
+  const detail = $('syncAllProductsStatus');
+  const running = Boolean(snapshot.running);
+  const total = Number(snapshot.total || 0);
+  const completed = Number(snapshot.completed || 0);
+  if (button) {
+    button.disabled = running;
+    button.textContent = running
+      ? (total ? `Đang đồng bộ ${completed}/${total}` : 'Đang chuẩn bị...')
+      : 'Đồng bộ tất cả';
   }
+  if (!detail) return;
+  if (running) {
+    detail.textContent = total
+      ? `Đang quét tuần tự ${completed}/${total} mapping; đã đồng bộ ${Number(snapshot.images_synced || 0)} ảnh.`
+      : 'Đang kiểm tra các mapping cần đồng bộ...';
+  } else if (snapshot.finished_at) {
+    const errors = Array.isArray(snapshot.errors) ? snapshot.errors.length : 0;
+    detail.textContent = total
+      ? `Hoàn tất ${Number(snapshot.mappings_synced || 0)}/${total} mapping, ${Number(snapshot.images_synced || 0)} ảnh${errors ? `, ${errors} lỗi` : ''}.`
+      : `Không cần quét lại; ${Number(snapshot.skipped || 0)} mapping vẫn còn mới.`;
+  }
+}
+
+async function syncAllSlideMappings(force = false) {
+  if (state.syncAllRunning) return;
+  state.syncAllRunning = true;
+  const pollToken = ++state.syncAllPollToken;
+  let snapshot = { running: true, total: 0, completed: 0, images_synced: 0 };
+  syncAllUi(snapshot);
+  try {
+    snapshot = await api('/api/slide-manager/drive/sync-all', {
+      method: 'POST',
+      body: JSON.stringify({ force: Boolean(force), stale_after_minutes: 15 })
+    });
+    syncAllUi(snapshot);
+    while (snapshot.running && pollToken === state.syncAllPollToken) {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      snapshot = await api('/api/slide-manager/drive/sync-all/status');
+      syncAllUi(snapshot);
+    }
+    if (pollToken !== state.syncAllPollToken) return;
+    const errors = Array.isArray(snapshot.errors) ? snapshot.errors.length : 0;
+    await loadAll(false);
+    if (errors) {
+      status(`Đồng bộ hoàn tất nhưng có ${errors} mapping lỗi. Xem trạng thái từng dòng để xử lý.`, true);
+    } else if (Number(snapshot.mappings_synced || 0) > 0) {
+      status(`Đã tự động đồng bộ ${snapshot.mappings_synced} mapping và ${snapshot.images_synced || 0} ảnh từ Drive.`);
+    } else if (force) {
+      status('Không có mapping Drive hợp lệ cần đồng bộ.', true);
+    }
+  } catch (error) {
+    syncAllUi({ running: false });
+    status(`Đồng bộ tất cả lỗi: ${error.message}`, true);
+  } finally {
+    if (pollToken === state.syncAllPollToken) {
+      state.syncAllRunning = false;
+      syncAllUi({ ...snapshot, running: false });
+    }
+  }
+}
+
+function maybeAutoSyncAllSlideMappings() {
+  if (state.productAutoSyncStarted) return;
+  state.productAutoSyncStarted = true;
+  syncAllSlideMappings(false);
 }
 
 async function saveRuntime(pageId) {
