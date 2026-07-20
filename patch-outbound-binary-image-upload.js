@@ -9,14 +9,28 @@ if (source.includes(marker)) {
   console.log("[AIGUKA] Binary Messenger image upload already installed");
 } else {
   source = source.replace(
-    'const WORKER_VERSION = "production_v1";',
-    'const WORKER_VERSION = "production_v2_binary_image_upload";',
+    'const WORKER_VERSION = "production_v3_comment_private_reply"; // AIGUKA_HUMAN_TAKEOVER_PREFLIGHT_V1 AIGUKA_COMMENT_PRIVATE_REPLY_V1',
+    'const WORKER_VERSION = "production_v4_binary_image_upload"; // AIGUKA_HUMAN_TAKEOVER_PREFLIGHT_V1 AIGUKA_COMMENT_PRIVATE_REPLY_V1 AIGUKA_BINARY_IMAGE_UPLOAD_V1',
   );
 
   const oldBlock = `async function sendMeta(item) {
   const token = await pageToken(item.page_id);
   if (!token) throw new Error(\`PAGE_ACCESS_TOKEN_NOT_FOUND_\${item.page_id}\`);
   const message = buildMetaMessage(item);
+  const deliveryMode = String(item.payload?.delivery_mode || "");
+  const commentId = String(item.payload?.comment_id || "").trim();
+
+  if (deliveryMode === "comment_private_reply") {
+    if (!commentId) throw new Error("COMMENT_PRIVATE_REPLY_ID_MISSING");
+    return graph(\`\${item.page_id}/messages\`, token, {
+      method: "POST",
+      body: {
+        recipient: { comment_id: commentId },
+        message,
+      },
+    });
+  }
+
   return graph(\`\${item.page_id}/messages\`, token, {
     method: "POST",
     body: {
@@ -84,7 +98,7 @@ async function fetchImageAsset(sourceUrl) {
       if (!contentType) throw new Error(\`NOT_IMAGE_\${response.headers.get("content-type") || "unknown"}\`);
       if (buffer.length < 32) throw new Error("IMAGE_TOO_SMALL");
       const filename = \`aiguka-\${Date.now()}.\${extensionForType(contentType)}\`;
-      return { blob: new Blob([buffer], { type: contentType }), filename, contentType, sourceUrl: candidate };
+      return { blob: new Blob([buffer], { type: contentType }), filename };
     } catch (error) {
       errors.push(\`\${candidate}:\${error.message}\`);
     }
@@ -121,6 +135,8 @@ async function uploadMessengerAttachment(pageId, token, asset) {
 async function sendMeta(item) {
   const token = await pageToken(item.page_id);
   if (!token) throw new Error(\`PAGE_ACCESS_TOKEN_NOT_FOUND_\${item.page_id}\`);
+  const deliveryMode = String(item.payload?.delivery_mode || "");
+  const commentId = String(item.payload?.comment_id || "").trim();
 
   let message;
   if (item.message_type === "image") {
@@ -132,6 +148,14 @@ async function sendMeta(item) {
     message = { attachment: { type: "image", payload: { attachment_id: attachmentId } } };
   } else {
     message = buildMetaMessage(item);
+  }
+
+  if (deliveryMode === "comment_private_reply") {
+    if (!commentId) throw new Error("COMMENT_PRIVATE_REPLY_ID_MISSING");
+    return graph(\`\${item.page_id}/messages\`, token, {
+      method: "POST",
+      body: { recipient: { comment_id: commentId }, message },
+    });
   }
 
   return graph(\`\${item.page_id}/messages\`, token, {
