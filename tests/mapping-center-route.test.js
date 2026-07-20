@@ -10,7 +10,19 @@ const fixtureByResource = {
   v8_product_catalog: [{
     catalog_key: 'bon_tam', catalog_name: 'Bồn tắm', parent_key: null, root_product_key: 'bon_tam',
     drive_folder_id: 'folder-bon-tam', drive_folder_url: '', folder_path: 'PHÒNG TẮM/BỒN TẮM',
-    level_no: 1, is_sendable: true, is_active: true
+    level_no: 1, is_sendable: true, is_active: true, metadata: { admin_order: 10 }
+  }, {
+    catalog_key: 'phu_kien', catalog_name: 'Phụ kiện', parent_key: null, root_product_key: 'phu_kien',
+    drive_folder_id: null, drive_folder_url: '', folder_path: '',
+    level_no: 1, is_sendable: true, is_active: true, metadata: { admin_order: 20 }
+  }, {
+    catalog_key: 'bon_tam_cu', catalog_name: 'Bồn tắm cũ', parent_key: 'bon_tam', root_product_key: 'bon_tam',
+    drive_folder_id: null, drive_folder_url: '', folder_path: '',
+    level_no: 2, is_sendable: true, is_active: false, metadata: { admin_order: 10 }
+  }, {
+    catalog_key: 'bon_tam_massage', catalog_name: 'Bồn tắm massage', parent_key: 'bon_tam', root_product_key: 'bon_tam',
+    drive_folder_id: null, drive_folder_url: '', folder_path: '',
+    level_no: 2, is_sendable: true, is_active: true, metadata: { admin_order: 20 }
   }],
   ad_mappings: [{
     id: 1, ad_id: 'ad-1', ad_name: 'QC tổng hợp', ad_account_id: 'account-1', ad_account_name: 'QC 1',
@@ -50,11 +62,21 @@ const fixtureByResource = {
 test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản QC/BM', async t => {
   const nativeFetch = globalThis.fetch;
   const previousMetaToken = process.env.META_ACCESS_TOKEN;
+  const supabaseWrites = [];
   process.env.META_ACCESS_TOKEN = 'test-meta-token';
   globalThis.fetch = async (input, options) => {
     const url = new URL(String(input));
     if (url.origin === 'http://supabase.test' && url.pathname.startsWith('/rest/v1/')) {
       const resource = url.pathname.slice('/rest/v1/'.length);
+      const method = String(options?.method || 'GET').toUpperCase();
+      if (method !== 'GET') {
+        const body = options?.body ? JSON.parse(String(options.body)) : null;
+        supabaseWrites.push({ resource, method, body });
+        return new Response(JSON.stringify(body ? [body] : []), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(JSON.stringify(fixtureByResource[resource] || []), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
@@ -126,6 +148,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
 
   const bootstrap = await nativeFetch(`${base}/api/v8-mapping-center/bootstrap?days=45`).then(response => response.json());
   assert.equal(bootstrap.ok, true);
+  assert.equal(bootstrap.catalogs.length, 3);
+  assert.equal(bootstrap.all_catalogs.length, 4);
+  assert.equal(bootstrap.all_catalogs.find(row => row.catalog_key === 'bon_tam_cu').is_active, false);
   assert.deepEqual(bootstrap.mappings[0].resolved_folder_ids, ['folder-bon-tam']);
   assert.equal(bootstrap.mappings[0].folder_sync_status, 'synced');
   assert.equal(bootstrap.current_ads[0].ad_account_id, 'account-1');
@@ -180,6 +205,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /Chưa chọn thư mục Drive/);
   assert.match(html, /id="syncAllProducts"/);
   assert.match(html, /Đồng bộ tất cả/);
+  assert.match(html, /data-tab="catalogs"/);
+  assert.match(html, /Quản lý Catalog cha — con/);
+  assert.match(html, /id="catalogModal"/);
+  assert.match(html, /Mã catalog là khóa kỹ thuật/);
   assert.match(html, /Tải cây Drive/);
   assert.doesNotMatch(html, /id="currentSearch"|id="m_target"|id="m_recognition"/);
 
@@ -196,6 +225,8 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(coreSource, /function fillMappingAccountSelect/);
   assert.match(coreSource, /function mappingBusinessFilterChanged/);
   assert.match(coreSource, /state\.currentAds\.filter\(isActiveMetaAd\)/);
+  assert.match(coreSource, /state\.allCatalogs = data\.all_catalogs/);
+  assert.match(coreSource, /renderCatalogs/);
 
   const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
   const cssSource = await nativeFetch(`${base}/admin/drive-slides-v8.css`).then(response => response.text());
@@ -244,6 +275,85 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(renderSource, /DELIVERY_UNVERIFIED/);
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
+  assert.match(renderSource, /function renderCatalogs/);
+  assert.match(renderSource, /function saveCatalog/);
+  assert.match(renderSource, /function reorderCatalog/);
+  assert.match(renderSource, /Mã catalog đã khóa/);
   assert.match(renderSource, /\/api\/slide-manager\/drive\/sync-all/);
   assert.doesNotMatch(renderSource, /syncSlideMapping|Đồng bộ ngay/);
+
+  const writeHeaders = { 'Content-Type': 'application/json', Origin: base };
+  const createdCatalog = await nativeFetch(`${base}/api/v8-mapping-center/catalog`, {
+    method: 'POST',
+    headers: writeHeaders,
+    body: JSON.stringify({
+      is_new: true,
+      catalog_key: 'bon_tam_moi',
+      catalog_name: 'Bồn tắm mới',
+      parent_key: 'bon_tam',
+      is_sendable: true,
+      is_active: true
+    })
+  });
+  assert.equal(createdCatalog.status, 200);
+  const createWrite = supabaseWrites.find(row => row.resource === 'v8_product_catalog' && row.method === 'POST' && row.body?.catalog_key === 'bon_tam_moi');
+  assert.ok(createWrite);
+  assert.equal(createWrite.body.level_no, 2);
+  assert.equal(createWrite.body.root_product_key, 'bon_tam');
+  assert.equal(createWrite.body.metadata.admin_order, 30);
+
+  const selfParent = await nativeFetch(`${base}/api/v8-mapping-center/catalog`, {
+    method: 'POST',
+    headers: writeHeaders,
+    body: JSON.stringify({
+      is_new: false,
+      catalog_key: 'bon_tam',
+      catalog_name: 'Bồn tắm',
+      parent_key: 'bon_tam',
+      is_sendable: true,
+      is_active: true
+    })
+  });
+  assert.equal(selfParent.status, 400);
+
+  const reorder = await nativeFetch(`${base}/api/v8-mapping-center/catalog/reorder`, {
+    method: 'POST',
+    headers: writeHeaders,
+    body: JSON.stringify({ catalog_key: 'bon_tam', direction: 'down' })
+  });
+  assert.equal(reorder.status, 200);
+  const reorderBody = await reorder.json();
+  assert.deepEqual(reorderBody.ordered_keys, ['phu_kien', 'bon_tam']);
+  assert.ok(supabaseWrites.some(row => row.resource === 'v8_product_catalog' && row.method === 'PATCH' && row.body?.metadata?.admin_order === 20));
+
+  const blockedDisable = await nativeFetch(`${base}/api/v8-mapping-center/catalog`, {
+    method: 'POST',
+    headers: writeHeaders,
+    body: JSON.stringify({
+      is_new: false,
+      catalog_key: 'bon_tam',
+      catalog_name: 'Bồn tắm',
+      parent_key: null,
+      is_sendable: true,
+      is_active: false
+    })
+  });
+  assert.equal(blockedDisable.status, 409);
+  const blockedBody = await blockedDisable.json();
+  assert.equal(blockedBody.blockers.children.length, 1);
+
+  const disabledCatalog = await nativeFetch(`${base}/api/v8-mapping-center/catalog`, {
+    method: 'POST',
+    headers: writeHeaders,
+    body: JSON.stringify({
+      is_new: false,
+      catalog_key: 'phu_kien',
+      catalog_name: 'Phụ kiện',
+      parent_key: null,
+      is_sendable: true,
+      is_active: false
+    })
+  });
+  assert.equal(disabledCatalog.status, 200);
+  assert.ok(supabaseWrites.some(row => row.resource === 'v8_product_catalog' && row.method === 'PATCH' && row.body?.is_active === false));
 });

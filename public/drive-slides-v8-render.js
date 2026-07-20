@@ -241,9 +241,9 @@ function renderMappings() {
   }
 }
 
-function catalogDescendantKeys(key) {
+function catalogDescendantKeys(key, rows = state.catalogs) {
   const children = new Map();
-  for (const row of state.catalogs) {
+  for (const row of rows) {
     const parent = String(row.parent_key || '');
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent).push(String(row.catalog_key || ''));
@@ -259,8 +259,8 @@ function catalogDescendantKeys(key) {
   return result;
 }
 
-function imageCountFor(key) {
-  const keys = catalogDescendantKeys(key);
+function imageCountFor(key, rows = state.catalogs) {
+  const keys = catalogDescendantKeys(key, rows);
   return (state.data?.asset_summary?.by_catalog || []).reduce((sum, row) => sum + (keys.has(String(row.catalog_key || '')) ? Number(row.images || 0) : 0), 0);
 }
 
@@ -341,6 +341,205 @@ function renderProducts() {
     tr.innerHTML = `<td><div class="status-title">${statusDotHtml(productStatus, productStatusLabel)}<b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b></div><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${folderHtml}</td><td><b>${shownCount}</b>${shownCount ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}${countDetail}</td><td>${syncStatusHtml(mapping, syncedCount)}</td><td>${action}</td>`;
     body.appendChild(tr);
   }
+}
+
+function catalogUsage(catalogKey) {
+  const adMappings = state.mappings.filter(row =>
+    String(row.product_item_key || '') === String(catalogKey) && row.is_active !== false && row.enabled !== false
+  ).length;
+  const slideMappings = state.slideMappings.filter(row =>
+    String(row.product_key || '') === String(catalogKey) && row.is_active !== false
+  ).length;
+  const activeChildren = state.allCatalogs.filter(row =>
+    String(row.parent_key || '') === String(catalogKey) && row.is_active !== false
+  ).length;
+  return { adMappings, slideMappings, activeChildren };
+}
+
+function renderCatalogs() {
+  const body = $('catalogBody');
+  if (!body) return;
+  const query = String($('catalogSearch')?.value || '').trim().toLocaleLowerCase('vi-VN');
+  const catalogState = $('catalogState')?.value || 'all';
+  const source = state.allCatalogs.filter(row =>
+    catalogState === 'all' || (catalogState === 'active' ? row.is_active !== false : row.is_active === false)
+  );
+  const rows = catalogTreeRows(source).filter(row => !query || [
+    row.catalog_key, row.catalog_name, row.parent_key, row.root_product_key, row.folder_path, row.drive_folder_id
+  ].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  const activeCount = state.allCatalogs.filter(row => row.is_active !== false).length;
+  $('catalogSummary').textContent = `${activeCount} catalog đang bật · ${state.allCatalogs.length - activeCount} đã tắt · ${rows.length} dòng đang hiển thị`;
+  body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có Catalog phù hợp.</td></tr>';
+  const byKey = new Map(state.allCatalogs.map(row => [String(row.catalog_key || ''), row]));
+  for (const row of rows) {
+    const key = String(row.catalog_key || '');
+    const parent = byKey.get(String(row.parent_key || ''));
+    const root = byKey.get(String(row.root_product_key || ''));
+    const usage = catalogUsage(key);
+    const imageCount = imageCountFor(key, state.allCatalogs);
+    const padding = 8 + Number(row._depth || 0) * 22;
+    const branch = row._depth ? '<span class="catalog-branch">└─</span>' : '';
+    const drive = row.drive_folder_id
+      ? `<div>📁 ${esc(row.folder_path || row.drive_folder_id)}</div><div class="small muted">${imageCount} ảnh Bot đã đồng bộ</div>`
+      : '<span class="badge warn">Chưa gán Drive</span>';
+    const usageText = [
+      usage.activeChildren ? `${usage.activeChildren} catalog con` : '',
+      usage.adMappings ? `${usage.adMappings} Mapping QC` : '',
+      usage.slideMappings ? `${usage.slideMappings} Mapping Drive` : ''
+    ].filter(Boolean).join(' · ') || 'Chưa được Mapping sử dụng';
+    const tr = document.createElement('tr');
+    if (row.is_active === false) tr.className = 'catalog-inactive';
+    tr.innerHTML = `<td><div class="catalog-name" style="padding-left:${padding}px">${branch}${statusDotHtml(row.is_active === false ? 'OFF' : 'ACTIVE', row.is_active === false ? 'Catalog đã tắt' : 'Catalog đang bật')}<b>${esc(row.catalog_name || key)}</b></div><div class="id catalog-key" style="padding-left:${padding + (row._depth ? 20 : 16)}px">${esc(key)}</div></td><td>${parent ? `<b>${esc(parent.catalog_name)}</b><div class="id">${esc(parent.catalog_key)}</div>` : '<span class="muted">Cấp cao nhất</span>'}</td><td>${root ? `<b>${esc(root.catalog_name)}</b><div class="id">${esc(row.root_product_key)}</div>` : `<span class="id">${esc(row.root_product_key || key)}</span>`}</td><td>${drive}</td><td>${row.is_active === false ? '<span class="badge bad">Đã tắt</span>' : '<span class="badge ok">Đang bật</span>'}<div class="small muted" style="margin-top:5px">${esc(usageText)}</div></td><td><div class="row-actions catalog-actions"><button onclick="openCatalogByKey('${esc(key)}')">Sửa</button>${row.is_active === false ? '' : `<button onclick="openCatalog({},'${esc(key)}')">+ Con</button>`}<button title="Đưa lên trong cùng cấp" aria-label="Đưa catalog lên" onclick="reorderCatalog('${esc(key)}','up')">↑</button><button title="Đưa xuống trong cùng cấp" aria-label="Đưa catalog xuống" onclick="reorderCatalog('${esc(key)}','down')">↓</button><button onclick="openCatalogDrive('${esc(key)}')">Sản phẩm & Drive</button>${row.is_active === false ? `<button onclick="setCatalogActive('${esc(key)}',true)">Bật lại</button>` : `<button class="danger" onclick="setCatalogActive('${esc(key)}',false)">Tắt</button>`}</div></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function catalogKeyFromName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+}
+
+function catalogNameChanged() {
+  if ($('c_is_new')?.value !== '1') return;
+  $('c_key').value = catalogKeyFromName($('c_name').value);
+  previewCatalogHierarchy();
+}
+
+function previewCatalogHierarchy() {
+  const key = $('c_key')?.value.trim() || catalogKeyFromName($('c_name')?.value);
+  const parent = state.allCatalogs.find(row => String(row.catalog_key) === String($('c_parent')?.value || ''));
+  const rootKey = !parent
+    ? key
+    : ($('c_sendable')?.checked && parent.is_sendable === false ? key : (parent.root_product_key || parent.catalog_key));
+  if ($('c_root')) $('c_root').value = rootKey || 'Sẽ tính sau khi nhập tên';
+}
+
+function openCatalogByKey(catalogKey) {
+  const row = state.allCatalogs.find(item => String(item.catalog_key) === String(catalogKey));
+  if (row) openCatalog(row);
+}
+
+function openCatalog(catalog = {}, requestedParent = '') {
+  const isNew = !catalog.catalog_key;
+  const key = String(catalog.catalog_key || '');
+  const excluded = key ? catalogDescendantKeys(key, state.allCatalogs) : new Set();
+  const parentRows = catalogTreeRows(state.allCatalogs.filter(row =>
+    !excluded.has(String(row.catalog_key)) && (row.is_active !== false || String(row.catalog_key) === String(catalog.parent_key || ''))
+  ));
+  fillSelect($('c_parent'), parentRows, 'catalog_key', row => `${'— '.repeat(row._depth)}${row.catalog_name} — ${row.catalog_key}`, 'Không có — catalog cấp cao nhất');
+  $('catalogTitle').textContent = isNew ? 'Thêm Catalog' : 'Sửa Catalog';
+  $('c_is_new').value = isNew ? '1' : '0';
+  $('c_key').value = key;
+  $('c_key').readOnly = !isNew;
+  $('c_key').classList.toggle('locked-input', !isNew);
+  $('c_key_help').textContent = isNew
+    ? 'Tự tạo từ tên; chỉ dùng chữ thường, số và dấu gạch dưới.'
+    : 'Mã catalog đã khóa để bảo vệ các Mapping đang tham chiếu.';
+  $('c_name').value = catalog.catalog_name || '';
+  $('c_parent').value = requestedParent || catalog.parent_key || '';
+  $('c_sendable').checked = catalog.is_sendable !== false;
+  $('c_active').checked = catalog.is_active !== false;
+  $('c_drive_path').value = catalog.folder_path || catalog.drive_folder_id || 'Chưa gán thư mục Drive';
+  $('c_drive_button').hidden = isNew;
+  previewCatalogHierarchy();
+  openModal('catalogModal');
+  if (isNew) $('c_name').focus();
+}
+
+async function saveCatalog(event) {
+  event.preventDefault();
+  const isNew = $('c_is_new').value === '1';
+  const catalogKey = $('c_key').value.trim().toLowerCase();
+  const active = $('c_active').checked;
+  if (!isNew && !active && !confirm('Tắt Catalog này? Hệ thống sẽ chặn nếu còn catalog con hoặc Mapping đang sử dụng.')) return;
+  busy(true);
+  try {
+    await api('/api/v8-mapping-center/catalog', {
+      method: 'POST',
+      body: JSON.stringify({
+        is_new: isNew,
+        catalog_key: catalogKey,
+        catalog_name: $('c_name').value.trim(),
+        parent_key: $('c_parent').value || null,
+        is_sendable: $('c_sendable').checked,
+        is_active: active
+      })
+    });
+    closeModal('catalogModal');
+    await loadAll(false);
+    status(isNew ? 'Đã tạo Catalog mới.' : 'Đã cập nhật Catalog.');
+  } catch (error) {
+    const blockers = error.data?.blockers;
+    const detail = blockers ? [
+      blockers.children?.length ? `${blockers.children.length} catalog con đang bật` : '',
+      blockers.ad_mappings?.length ? `${blockers.ad_mappings.length} Mapping QC đang dùng` : '',
+      blockers.slide_mappings?.length ? `${blockers.slide_mappings.length} Mapping Drive đang dùng` : ''
+    ].filter(Boolean).join(', ') : '';
+    status(detail ? `${error.message} (${detail})` : error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function setCatalogActive(catalogKey, active) {
+  const catalog = state.allCatalogs.find(row => String(row.catalog_key) === String(catalogKey));
+  if (!catalog) return;
+  if (!active && !confirm(`Tắt Catalog “${catalog.catalog_name}”?`)) return;
+  busy(true);
+  try {
+    await api('/api/v8-mapping-center/catalog', {
+      method: 'POST',
+      body: JSON.stringify({
+        is_new: false,
+        catalog_key: catalog.catalog_key,
+        catalog_name: catalog.catalog_name,
+        parent_key: catalog.parent_key || null,
+        is_sendable: catalog.is_sendable !== false,
+        is_active: active
+      })
+    });
+    await loadAll(false);
+    status(active ? 'Đã bật lại Catalog.' : 'Đã tắt Catalog.');
+  } catch (error) {
+    const blockers = error.data?.blockers;
+    const detail = blockers ? [
+      blockers.children?.length ? `${blockers.children.length} catalog con` : '',
+      blockers.ad_mappings?.length ? `${blockers.ad_mappings.length} Mapping QC` : '',
+      blockers.slide_mappings?.length ? `${blockers.slide_mappings.length} Mapping Drive` : ''
+    ].filter(Boolean).join(', ') : '';
+    status(detail ? `${error.message} Đang vướng: ${detail}.` : error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function reorderCatalog(catalogKey, direction) {
+  busy(true);
+  try {
+    const result = await api('/api/v8-mapping-center/catalog/reorder', {
+      method: 'POST', body: JSON.stringify({ catalog_key: catalogKey, direction })
+    });
+    if (!result.unchanged) await loadAll(false);
+    status(result.unchanged ? 'Catalog đã ở đầu/cuối trong cùng cấp.' : 'Đã sắp xếp lại Catalog.');
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+function openCatalogDrive(catalogKey = '') {
+  const key = catalogKey || $('c_key')?.value || '';
+  closeModal('catalogModal');
+  if ($('productSearch')) $('productSearch').value = key;
+  showTab('products');
+  renderProducts();
 }
 
 function renderRuntime() {

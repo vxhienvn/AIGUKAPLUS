@@ -5,6 +5,7 @@ const state = {
   metaError: '',
   mappings: [],
   catalogs: [],
+  allCatalogs: [],
   groups: [],
   folders: [],
   slideMappings: [],
@@ -68,7 +69,12 @@ async function api(url, options = {}) {
       return api(url, options);
     }
   }
-  if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || `HTTP ${response.status}`);
+    error.data = data;
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -238,7 +244,8 @@ async function loadAll(showMessage = true) {
     state.data = data;
     state.currentAds = data.current_ads || [];
     state.mappings = data.mappings || [];
-    state.catalogs = data.catalogs || [];
+    state.allCatalogs = data.all_catalogs || data.catalogs || [];
+    state.catalogs = (data.catalogs || state.allCatalogs).filter(row => row.is_active !== false);
     state.groups = data.groups || [];
     state.folders = data.asset_summary?.folders || [];
     if (state.driveTree.length) mergeDriveTreeFolders(state.driveTree);
@@ -294,7 +301,13 @@ function catalogTreeRows(rows = state.catalogs) {
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent).push(row);
   }
-  const sortRows = list => list.sort((a, b) => String(a.catalog_name || a.catalog_key).localeCompare(String(b.catalog_name || b.catalog_key), 'vi'));
+  const sortRows = list => list.sort((a, b) => {
+    const aOrder = Number(a.metadata?.admin_order ?? a.metadata?.sort_order);
+    const bOrder = Number(b.metadata?.admin_order ?? b.metadata?.sort_order);
+    const safeA = Number.isFinite(aOrder) ? aOrder : Number.MAX_SAFE_INTEGER;
+    const safeB = Number.isFinite(bOrder) ? bOrder : Number.MAX_SAFE_INTEGER;
+    return safeA - safeB || String(a.catalog_name || a.catalog_key).localeCompare(String(b.catalog_name || b.catalog_key), 'vi', { numeric: true, sensitivity: 'base' });
+  });
   const roots = sortRows(rows.filter(row => !row.parent_key || !byKey.has(String(row.parent_key))));
   const result = [];
   const visited = new Set();
@@ -574,6 +587,7 @@ function renderAll() {
   renderCurrent();
   renderMappings();
   renderProducts();
+  if (typeof renderCatalogs === 'function') renderCatalogs();
   renderRuntime();
   renderLog();
 }
