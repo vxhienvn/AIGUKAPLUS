@@ -13,7 +13,7 @@ BEGIN
     'public.v8_authorize_outbound_send(uuid,text)'::regprocedure
   ) INTO v_definition;
 
-  IF position("nullif(g.details->>'due_at','')::timestamptz" in v_definition)=0 THEN
+  IF position($needle$nullif(g.details->>'due_at','')::timestamptz$needle$ in v_definition)=0 THEN
     v_old := $old$v_due:=coalesce(nullif(g.details->>'ready_at','')::timestamptz,nullif(g.details->>'pause_until','')::timestamptz,now()+interval '5 seconds');$old$;
     v_new := $new$v_due:=coalesce(nullif(g.details->>'ready_at','')::timestamptz,nullif(g.details->>'pause_until','')::timestamptz,nullif(g.details->>'due_at','')::timestamptz,now()+interval '5 seconds');$new$;
 
@@ -37,7 +37,7 @@ BEGIN
     'public.v8_reconcile_ready_outbound_queue(integer)'::regprocedure
   ) INTO v_definition;
 
-  IF position("nullif(v_gate.details->>'due_at','')::timestamptz" in v_definition)=0 THEN
+  IF position($needle$nullif(v_gate.details->>'due_at','')::timestamptz$needle$ in v_definition)=0 THEN
     v_old := $old$          nullif(v_gate.details->>'ready_at','')::timestamptz,
           nullif(v_gate.details->>'pause_until','')::timestamptz,
           now()+interval '5 seconds'$old$;
