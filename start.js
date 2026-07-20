@@ -62,5 +62,6 @@ await import("./server-fixed.js");
 await import("./patch-outbound-human-takeover.js");
 await import("./patch-outbound-comment-private-reply.js");
 await import("./patch-outbound-binary-image-upload.js");
+await import("./meta-profile-sync-worker.js");
 await import("./ai-dispatch-worker.js");
 await import("./outbound-worker.js");
