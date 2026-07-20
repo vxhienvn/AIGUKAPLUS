@@ -138,7 +138,7 @@ function syncStatusHtml(mapping, syncedCount) {
   if (mapping._catalog_only) return '<span class="badge info">Theo catalog</span>';
   const statusValue = String(mapping.sync_status || 'idle').toLowerCase();
   if (statusValue === 'success') return `<span class="badge ok">Đã đồng bộ</span><div class="small muted">${fmtDate(mapping.last_synced_at)}</div>`;
-  if (statusValue === 'error') return `<span class="badge bad">Đồng bộ lỗi</span><div class="small warn-text">${esc(mapping.sync_error || 'Bấm Đồng bộ ngay để thử lại')}</div>`;
+  if (statusValue === 'error') return `<span class="badge bad">Đồng bộ lỗi</span><div class="small warn-text">${esc(mapping.sync_error || 'Bấm Đồng bộ tất cả để thử lại')}</div>`;
   if (statusValue === 'requested') return '<span class="badge warn">Đang chờ đồng bộ</span>';
   return `<span class="badge warn">Chưa đồng bộ</span><div class="small muted">${syncedCount} ảnh Bot đang dùng</div>`;
 }
