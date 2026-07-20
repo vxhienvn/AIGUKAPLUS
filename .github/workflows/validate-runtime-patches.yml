@@ -30,6 +30,7 @@ jobs:
           node --check patch-v7-leads-referral-source.js
           node --check patch-v7-null-safety.js
           node --check patch-v7-runtime-integrity.js
+          node --check patch-catalog-key-rename.js
           node --check start.js
 
       - name: Check destructive patch order
@@ -59,6 +60,21 @@ jobs:
           node patch-drive-slide-manager-v2.js
           node --check drive-slide-manager.js
           mv /tmp/drive-slide-manager.js drive-slide-manager.js
+
+      - name: Apply and validate catalog rename patch
+        run: |
+          cp public/drive-slides-v8.html /tmp/drive-slides-v8.html
+          cp public/drive-slides-v8-render.js /tmp/drive-slides-v8-render.js
+          cp src/routes/mappingCenterRoutes.js /tmp/mappingCenterRoutes.js
+          node patch-catalog-key-rename.js
+          node --check public/drive-slides-v8-render.js
+          node --check src/routes/mappingCenterRoutes.js
+          grep -q 'id="c_original_key"' public/drive-slides-v8.html
+          grep -q '/api/v8-mapping-center/catalog/rename' public/drive-slides-v8-render.js
+          grep -q 'rpc/v8_admin_rename_catalog_key' src/routes/mappingCenterRoutes.js
+          mv /tmp/drive-slides-v8.html public/drive-slides-v8.html
+          mv /tmp/drive-slides-v8-render.js public/drive-slides-v8-render.js
+          mv /tmp/mappingCenterRoutes.js src/routes/mappingCenterRoutes.js
 
       - name: Apply and validate Pancake service patch
         run: |
