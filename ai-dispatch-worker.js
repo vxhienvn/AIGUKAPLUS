@@ -1,7 +1,7 @@
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const WORKER_NAME = process.env.AIGUKA_AI_DISPATCH_WORKER_NAME || "aiguka-railway-ai-dispatch";
-const WORKER_VERSION = "profile_preflight_v1";
+const WORKER_VERSION = "profile_preflight_v2_authenticated_brain";
 const POLL_MS = Math.max(1000, Number(process.env.AIGUKA_AI_DISPATCH_POLL_MS || 1200));
 
 let running = false;
@@ -56,7 +56,9 @@ async function heartbeat(status = "healthy", lastError = null) {
         profile_sync_preflight: true,
         meta_signed_sync: true,
         ai_brain_dispatch: true,
+        ai_brain_authenticated: true,
         decision_revision_gate: true,
+        truthful_item_health: true,
       },
       last_error: lastError ? String(lastError).slice(0, 500) : null,
       last_seen_at: new Date().toISOString(),
@@ -76,7 +78,7 @@ async function ensureProfile(item) {
   let customer = await readCustomer(item.page_id, item.sender_id);
   const needsSync = !customer || placeholderName(customer.display_name)
     || ["deferred_on_demand", "error", "empty_profile"].includes(String(customer.profile_sync_status || ""));
-  if (!needsSync) return { attempted: false, customer };
+  if (!needsSync) return { attempted: false, ready: true, customer };
 
   await rpc("v8_dispatch_single_customer_profile_sync", {
     p_page_id: item.page_id,
@@ -88,13 +90,17 @@ async function ensureProfile(item) {
     customer = await readCustomer(item.page_id, item.sender_id);
     if (customer && !placeholderName(customer.display_name)) break;
   }
-  return { attempted: true, customer };
+  return { attempted: true, ready: Boolean(customer && !placeholderName(customer.display_name)), customer };
 }
 
 async function dispatchBrain(item) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/aiguka-v8-ai-brain`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "content-type": "application/json",
+    },
     body: JSON.stringify({ request_id: item.id }),
     signal: AbortSignal.timeout(90_000),
     cache: "no-store",
@@ -105,6 +111,7 @@ async function dispatchBrain(item) {
   if (!response.ok && response.status !== 409) {
     throw new Error(data?.error || `AI_BRAIN_HTTP_${response.status}`);
   }
+  if (response.ok && data?.ok === false) throw new Error(data?.error || "AI_BRAIN_REPORTED_FAILURE");
   return data;
 }
 
@@ -119,12 +126,14 @@ async function processItem(item) {
       p_error: null,
       p_details: {
         profile_sync_attempted: profile.attempted,
+        profile_ready: profile.ready,
         display_name: profile.customer?.display_name || null,
         gender: profile.customer?.gender || null,
         preferred_salutation: profile.customer?.preferred_salutation || null,
         brain_result: result?.ok ?? true,
       },
     }).catch(() => {});
+    return true;
   } catch (error) {
     const message = String(error?.message || error).slice(0, 800);
     console.error(`[AIGUKA AI dispatch] ${item.id}:`, message);
@@ -135,6 +144,7 @@ async function processItem(item) {
       p_error: message,
       p_details: {},
     }).catch(() => {});
+    return false;
   }
 }
 
@@ -142,13 +152,20 @@ async function poll() {
   if (!configured() || running) return;
   running = true;
   try {
-    await heartbeat("healthy", null);
     const claimed = await rpc("v8_claim_ai_dispatch_batch", {
       p_worker: WORKER_NAME,
       p_batch_size: 5,
     });
-    for (const item of Array.isArray(claimed) ? claimed : []) await processItem(item);
-    await heartbeat("healthy", null);
+    let failures = 0;
+    for (const item of Array.isArray(claimed) ? claimed : []) {
+      const ok = await processItem(item);
+      if (!ok) failures += 1;
+    }
+    if (failures > 0) {
+      await heartbeat("degraded", `${failures}/${claimed.length} AI dispatch item(s) failed`);
+    } else {
+      await heartbeat("healthy", null);
+    }
   } catch (error) {
     const message = String(error?.message || error);
     if (!message.includes("v8_claim_ai_dispatch_batch")) {
