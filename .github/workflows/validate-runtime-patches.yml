@@ -69,7 +69,8 @@ jobs:
 
       - name: Build final dashboard and smoke both routes
         env:
-          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          # Synthetic CI must not trigger the production-schema probe. That probe
+          # runs at real startup only when an actual service-role key is present.
           SUPABASE_URL: https://example.supabase.co
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
