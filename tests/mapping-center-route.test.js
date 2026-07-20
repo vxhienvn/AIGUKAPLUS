@@ -98,6 +98,8 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /Chiến dịch \/ Nhóm quảng cáo/);
   assert.doesNotMatch(html, /Tài khoản QC \/ Quảng cáo/);
   assert.match(html, /Chưa chọn thư mục Drive/);
+  assert.match(html, /id="syncAllProducts"/);
+  assert.match(html, /Đồng bộ tất cả/);
   assert.match(html, /Tải cây Drive/);
   assert.doesNotMatch(html, /id="currentSearch"|id="m_target"|id="m_recognition"/);
 
@@ -109,5 +111,8 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.doesNotMatch(currentRenderer, /colspan="6"/);
   assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"|ad_account_name|business_name|ad_title|row\.ad_name/);
   assert.match(renderSource, /Thiếu nguồn ảnh/);
-  assert.match(renderSource, /syncSlideMapping/);
+  assert.match(renderSource, /syncAllSlideMappings/);
+  assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
+  assert.match(renderSource, /\/api\/slide-manager\/drive\/sync-all/);
+  assert.doesNotMatch(renderSource, /syncSlideMapping|Đồng bộ ngay/);
 });
