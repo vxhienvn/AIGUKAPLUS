@@ -31,7 +31,7 @@ export function installMappingCenter(app, options = {}) {
     );
     const META_GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v23.0');
     const jsonBody = express.json({ limit: '2mb' });
-    const metaAdsCache = { rows: [], loadedAt: 0 };
+    const metaAdsCache = { rows: [], adAccounts: [], businesses: [], loadedAt: 0 };
 
     function mappingApiReady() {
         return Boolean(SUPABASE_URL && SUPABASE_KEY);
@@ -170,6 +170,8 @@ export function installMappingCenter(app, options = {}) {
                 ...row,
                 customers: row.customers.size,
                 contacts: row.contacts.size,
+                ad_account_id: mapping?.ad_account_id || '',
+                ad_account_name: mapping?.ad_account_name || '',
                 mapped: Boolean(mapping && mapping.is_active !== false && mapping.enabled !== false),
                 mapping
             };
@@ -194,6 +196,7 @@ export function installMappingCenter(app, options = {}) {
                 const folder = folders.get(folderId) || {
                     folder_id: folderId,
                     folder_name: row.parent_folder_name || folderId,
+                    folder_path: row.parent_folder_name || folderId,
                     folder_url: row.parent_folder_url || '',
                     images: 0,
                     catalogs: new Set()
@@ -217,10 +220,14 @@ export function installMappingCenter(app, options = {}) {
             const current = folders.get(id) || {
                 folder_id: id,
                 folder_name: fallback.folder_name || value?.name || value?.path || id,
+                folder_path: fallback.folder_path || value?.path || value?.name || id,
                 folder_url: fallback.folder_url || value?.url || `https://drive.google.com/drive/folders/${id}`,
                 images: 0,
                 catalogs: []
             };
+            if ((!current.folder_path || current.folder_path === current.folder_name) && fallback.folder_path) {
+                current.folder_path = fallback.folder_path;
+            }
             const catalogKey = String(fallback.catalog_key || '').trim();
             current.catalogs = [...new Set([...(current.catalogs || []), ...(catalogKey ? [catalogKey] : [])])];
             folders.set(id, current);
@@ -228,6 +235,7 @@ export function installMappingCenter(app, options = {}) {
         for (const catalog of Array.isArray(catalogs) ? catalogs : []) {
             addFolder(catalog.drive_folder_id, {
                 folder_name: catalog.folder_path || catalog.catalog_name,
+                folder_path: catalog.folder_path || catalog.catalog_name,
                 folder_url: catalog.drive_folder_url,
                 catalog_key: catalog.catalog_key
             });
@@ -243,6 +251,111 @@ export function installMappingCenter(app, options = {}) {
         }
         assetSummary.folders = [...folders.values()].sort((a, b) => String(a.folder_name).localeCompare(String(b.folder_name), 'vi'));
         return assetSummary;
+    }
+
+    function folderToken(value) {
+        if (typeof value === 'string') return value.trim();
+        if (!value || typeof value !== 'object') return '';
+        return String(value.id || value.folder_id || value.drive_folder_id || value.path || value.name || '').trim();
+    }
+
+    function normalizedFolderPath(value) {
+        return String(value || '')
+            .trim()
+            .replace(/^https?:\/\/drive\.google\.com\/drive\/folders\//i, '')
+            .replace(/[?#].*$/, '')
+            .replace(/^bathroom(?=\/|$)/i, 'PHÒNG TẮM')
+            .replace(/^kitchen(?=\/|$)/i, 'PHÒNG BẾP')
+            .replace(/^phòng tắm\/sen vòi 01$/i, 'PHÒNG TẮM/SEN CÂY/Sen vòi')
+            .replace(/^phòng tắm\/tủ chậu gương$/i, 'PHÒNG TẮM/GƯƠNG-TỦ')
+            .replace(/\s*[-–—]\s*/g, '-')
+            .replace(/\s*\/\s*/g, '/')
+            .toLocaleLowerCase('vi-VN');
+    }
+
+    function buildFolderLookup(folders = [], catalogs = []) {
+        const byId = new Map();
+        const byPath = new Map();
+        const byLeaf = new Map();
+        const remember = (map, key, id) => {
+            if (!key || !id) return;
+            const current = map.get(key) || new Set();
+            current.add(id);
+            map.set(key, current);
+        };
+        for (const folder of Array.isArray(folders) ? folders : []) {
+            const id = String(folder.folder_id || '').trim();
+            if (!id) continue;
+            byId.set(id, id);
+            for (const value of [folder.folder_name, folder.folder_path]) {
+                const normalized = normalizedFolderPath(value);
+                remember(byPath, normalized, id);
+                remember(byLeaf, normalized.split('/').pop(), id);
+            }
+        }
+        for (const catalog of Array.isArray(catalogs) ? catalogs : []) {
+            const id = String(catalog.drive_folder_id || '').trim();
+            if (!id) continue;
+            byId.set(id, id);
+            const normalized = normalizedFolderPath(catalog.folder_path || catalog.catalog_name);
+            remember(byPath, normalized, id);
+            remember(byLeaf, normalized.split('/').pop(), id);
+        }
+        return { byId, byPath, byLeaf };
+    }
+
+    function canonicalFolderIds(values, lookup) {
+        const ids = [];
+        for (const value of Array.isArray(values) ? values : []) {
+            const token = folderToken(value);
+            if (!token) continue;
+            const urlId = token.match(/\/folders\/([a-z0-9_-]+)/i)?.[1] || token.match(/[?&]id=([a-z0-9_-]+)/i)?.[1] || '';
+            const direct = lookup.byId.get(token) || lookup.byId.get(urlId);
+            if (direct) {
+                ids.push(direct);
+                continue;
+            }
+            const normalized = normalizedFolderPath(token);
+            let candidates = lookup.byPath.get(normalized);
+            if (!candidates || candidates.size !== 1) candidates = lookup.byLeaf.get(normalized.split('/').pop());
+            if (candidates?.size === 1) ids.push([...candidates][0]);
+        }
+        return [...new Set(ids)];
+    }
+
+    function normalizeStoredMappings(mappings, folders, catalogs) {
+        const lookup = buildFolderLookup(folders, catalogs);
+        return (Array.isArray(mappings) ? mappings : []).map(mapping => {
+            const stored = Array.isArray(mapping.selected_folders) && mapping.selected_folders.length
+                ? mapping.selected_folders
+                : (Array.isArray(mapping.drive_folders) ? mapping.drive_folders : []);
+            const resolvedFolderIds = canonicalFolderIds(stored, lookup);
+            return {
+                ...mapping,
+                resolved_folder_ids: resolvedFolderIds,
+                folder_sync_status: !stored.length ? 'empty' : (resolvedFolderIds.length === stored.length ? 'synced' : 'partial')
+            };
+        });
+    }
+
+    function normalizeAccountRows(...sources) {
+        const accounts = new Map();
+        for (const source of sources) {
+            for (const row of Array.isArray(source) ? source : []) {
+                const id = String(row.ad_account_id || row.account_id || row.id || '').replace(/^act_/, '').trim();
+                if (!id || row.is_active === false) continue;
+                const current = accounts.get(id) || { ad_account_id: id };
+                accounts.set(id, {
+                    ...current,
+                    ad_account_name: row.ad_account_name || row.account_name || row.name || current.ad_account_name || id,
+                    business_id: String(row.business_id || row.business?.id || current.business_id || '').trim(),
+                    business_name: row.business_name || row.business?.name || current.business_name || '',
+                    account_status: row.account_status || current.account_status || '',
+                    source: row.source || current.source || 'supabase'
+                });
+            }
+        }
+        return [...accounts.values()].sort((a, b) => String(a.ad_account_name).localeCompare(String(b.ad_account_name), 'vi'));
     }
 
     function metaRootToken() {
@@ -289,20 +402,46 @@ export function installMappingCenter(app, options = {}) {
     }
 
     async function fetchCurrentMetaAds(force = false) {
-        if (!force && metaAdsCache.rows.length && Date.now() - metaAdsCache.loadedAt < 180000) return metaAdsCache.rows;
+        if (!force && metaAdsCache.loadedAt && Date.now() - metaAdsCache.loadedAt < 180000) {
+            return {
+                rows: metaAdsCache.rows,
+                ad_accounts: metaAdsCache.adAccounts,
+                businesses: metaAdsCache.businesses
+            };
+        }
         const token = metaRootToken();
         if (!token) {
             const error = new Error('Chưa có kết nối Meta để đồng bộ danh sách quảng cáo.');
             error.status = 503;
             throw error;
         }
-        let accountIds = configuredAdAccountIds();
-        const accountNames = new Map();
-        if (!accountIds.length) {
-            const accountUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/adaccounts?fields=id,account_id,name,account_status&limit=200&access_token=${encodeURIComponent(token)}`;
-            const accounts = await metaPages(accountUrl, 5);
-            accountIds = accounts.map(row => String(row.account_id || row.id || '').replace(/^act_/, '')).filter(Boolean);
-            for (const row of accounts) accountNames.set(String(row.account_id || row.id || '').replace(/^act_/, ''), row.name || '');
+        let visibleAccounts = [];
+        let visibleBusinesses = [];
+        try {
+            const fields = 'id,account_id,name,account_status,business{id,name}';
+            const accountUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/adaccounts?fields=${encodeURIComponent(fields)}&limit=200&access_token=${encodeURIComponent(token)}`;
+            visibleAccounts = await metaPages(accountUrl, 5);
+        } catch (error) {
+            console.warn('[MAPPING_CENTER] Meta visible ad accounts:', error.message);
+        }
+        try {
+            const businessUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/businesses?fields=id,name&limit=200&access_token=${encodeURIComponent(token)}`;
+            visibleBusinesses = await metaPages(businessUrl, 5);
+        } catch (error) {
+            console.warn('[MAPPING_CENTER] Meta visible businesses:', error.message);
+        }
+        const adAccounts = normalizeAccountRows(visibleAccounts, configuredAdAccountIds().map(id => ({ ad_account_id: id, source: 'railway_config' })));
+        const accountIds = adAccounts.map(row => row.ad_account_id);
+        const accountById = new Map(adAccounts.map(row => [row.ad_account_id, row]));
+        const businesses = new Map();
+        for (const row of visibleBusinesses) {
+            const id = String(row.id || '').trim();
+            if (id) businesses.set(id, { business_id: id, business_name: row.name || id });
+        }
+        for (const row of adAccounts) {
+            if (row.business_id && !businesses.has(row.business_id)) {
+                businesses.set(row.business_id, { business_id: row.business_id, business_name: row.business_name || row.business_id });
+            }
         }
         const batches = await Promise.all(accountIds.map(async accountId => {
             const fields = 'id,name,status,effective_status,configured_status,account_id,campaign{id,name},adset{id,name,promoted_object}';
@@ -313,7 +452,9 @@ export function installMappingCenter(app, options = {}) {
                     ad_id: String(ad.id || ''),
                     ad_name: ad.name || '',
                     ad_account_id: String(ad.account_id || accountId).replace(/^act_/, ''),
-                    ad_account_name: accountNames.get(String(ad.account_id || accountId).replace(/^act_/, '')) || '',
+                    ad_account_name: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.ad_account_name || '',
+                    business_id: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.business_id || '',
+                    business_name: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.business_name || '',
                     campaign_id: String(ad.campaign?.id || ''),
                     campaign_name: ad.campaign?.name || '',
                     adset_id: String(ad.adset?.id || ''),
@@ -331,8 +472,10 @@ export function installMappingCenter(app, options = {}) {
         const visibleStatuses = new Set(['ACTIVE', 'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED']);
         const rows = batches.flat().filter(row => row.ad_id && visibleStatuses.has(String(row.effective_status || row.status || '').toUpperCase()));
         metaAdsCache.rows = rows;
+        metaAdsCache.adAccounts = adAccounts;
+        metaAdsCache.businesses = [...businesses.values()].sort((a, b) => String(a.business_name).localeCompare(String(b.business_name), 'vi'));
         metaAdsCache.loadedAt = Date.now();
-        return rows;
+        return { rows, ad_accounts: metaAdsCache.adAccounts, businesses: metaAdsCache.businesses };
     }
 
     app.get('/api/v8-mapping-center/bootstrap', async (req, res) => {
@@ -348,15 +491,31 @@ export function installMappingCenter(app, options = {}) {
                 safeSupabaseRest('v8_slide_mapping?select=*&order=priority.asc,product_name.asc&limit=1000'),
                 safeSupabaseRest(`v8_meta_ad_referral_entries?select=page_id,page_name,sender_id,ad_id,ad_title,post_id,referral_source,referral_at,has_phone,has_zalo&is_ad_referral=eq.true&referral_at=gte.${encodeURIComponent(since)}&order=referral_at.desc&limit=10000`),
                 safeSupabaseRest('v8_drive_assets?select=product_key,catalog_key,parent_folder_id,parent_folder_name,parent_folder_url,is_image,is_active,delivery_status&is_active=eq.true&is_image=eq.true&limit=10000'),
-                safeSupabaseRest("v8_admin_change_log?select=*&or=(asset_type.ilike.*mapping*,action.ilike.*mapping*)&order=created_at.desc&limit=50")
+                safeSupabaseRest("v8_admin_change_log?select=*&or=(asset_type.ilike.*mapping*,action.ilike.*mapping*)&order=created_at.desc&limit=50"),
+                safeSupabaseRest('v8_meta_ad_account_registry?select=ad_account_id,ad_account_name,business_id,account_status,is_active,source,last_verified_at&is_active=eq.true&order=ad_account_name.asc'),
+                safeSupabaseRest('v8_meta_ad_accounts?select=ad_account_id,ad_account_name,business_id,account_status,is_active,source,last_verified_at&is_active=eq.true&order=ad_account_name.asc')
             ]);
-            const [pages, runtime, groups, catalogs, mappings, slideMappings, referrals, assets, changeLog] = queries;
+            const [pages, runtime, groups, catalogs, mappings, slideMappings, referrals, assets, changeLog, accountRegistry, metaAccounts] = queries;
             const assetSummary = mergeConfiguredFolders(aggregateAssets(assets.data), catalogs.data, slideMappings.data);
-            const currentAds = aggregateCurrentAds(referrals.data, mappings.data);
+            const normalizedMappings = normalizeStoredMappings(mappings.data, assetSummary.folders, catalogs.data);
+            const currentAds = aggregateCurrentAds(referrals.data, normalizedMappings);
+            const mappingAccounts = normalizedMappings.map(row => ({
+                ad_account_id: row.ad_account_id,
+                ad_account_name: row.ad_account_name,
+                account_status: row.account_status,
+                source: 'ad_mapping'
+            }));
+            const adAccounts = normalizeAccountRows(accountRegistry.data, metaAccounts.data, metaAdsCache.adAccounts, mappingAccounts);
+            const businesses = new Map(metaAdsCache.businesses.map(row => [String(row.business_id || ''), row]));
+            for (const account of adAccounts) {
+                if (account.business_id && !businesses.has(account.business_id)) {
+                    businesses.set(account.business_id, { business_id: account.business_id, business_name: account.business_name || account.business_id });
+                }
+            }
             const mappedCurrent = currentAds.filter(row => row.mapped).length;
             res.json({
                 ok: true,
-                version: 'railway_unified_mapping_center_v1',
+                version: 'railway_unified_mapping_center_v2',
                 generated_at: new Date().toISOString(),
                 days,
                 requires_admin_key: Boolean(MAPPING_ADMIN_KEY),
@@ -364,16 +523,18 @@ export function installMappingCenter(app, options = {}) {
                 runtime: runtime.data,
                 groups: groups.data,
                 catalogs: catalogs.data,
-                mappings: mappings.data,
+                mappings: normalizedMappings,
                 slide_mappings: slideMappings.data,
                 current_ads: currentAds,
+                ad_accounts: adAccounts,
+                businesses: [...businesses.values()].filter(row => row.business_id).sort((a, b) => String(a.business_name).localeCompare(String(b.business_name), 'vi')),
                 asset_summary: assetSummary,
                 change_log: changeLog.data,
                 summary: {
                     current_ads: currentAds.length,
                     mapped_current_ads: mappedCurrent,
                     unmapped_current_ads: currentAds.length - mappedCurrent,
-                    total_mappings: Array.isArray(mappings.data) ? mappings.data.length : 0,
+                    total_mappings: normalizedMappings.length,
                     active_images: Array.isArray(assets.data) ? assets.data.length : 0
                 },
                 warnings: queries.map(item => item.error).filter(Boolean)
@@ -386,8 +547,8 @@ export function installMappingCenter(app, options = {}) {
     app.get('/api/ad-mapping/meta', async (req, res) => {
         try {
             const force = String(req.query.sync || '') === '1';
-            const rows = await fetchCurrentMetaAds(force);
-            res.json({ ok: true, rows, synced_at: new Date(metaAdsCache.loadedAt).toISOString(), source: 'meta_graph' });
+            const snapshot = await fetchCurrentMetaAds(force);
+            res.json({ ok: true, ...snapshot, synced_at: new Date(metaAdsCache.loadedAt).toISOString(), source: 'meta_graph' });
         } catch (error) {
             res.status(error.status || 502).json({ ok: false, error: error.message });
         }
@@ -398,7 +559,13 @@ export function installMappingCenter(app, options = {}) {
             const input = req.body || {};
             const adId = String(input.ad_id || '').trim();
             if (!adId) return res.status(400).json({ ok: false, error: 'Thiếu Ad ID.' });
-            const folders = Array.isArray(input.selected_folders) ? input.selected_folders.filter(Boolean) : [];
+            const folders = [...new Set((Array.isArray(input.selected_folders) ? input.selected_folders : []).map(folderToken).filter(Boolean))];
+            const productGroup = String(input.product_group || '').trim();
+            const productItemKey = String(input.product_item_key || '').trim();
+            if (!productGroup && !productItemKey && !folders.length) {
+                return res.status(400).json({ ok: false, error: 'Hãy chọn nhóm, sản phẩm hoặc ít nhất một thư mục Drive.' });
+            }
+            const targetType = productItemKey ? 'product' : (productGroup ? 'group' : 'scope');
             const row = {
                 ad_account_id: String(input.ad_account_id || '').trim(),
                 ad_account_name: String(input.ad_account_name || '').trim(),
@@ -410,13 +577,13 @@ export function installMappingCenter(app, options = {}) {
                 ad_name: String(input.ad_name || input.ad_title || '').trim(),
                 product_type: String(input.product_type || '').trim(),
                 product_name: String(input.product_name || '').trim(),
-                product_group: String(input.product_group || '').trim(),
-                product_item_key: String(input.product_item_key || '').trim(),
+                product_group: productGroup,
+                product_item_key: productItemKey,
                 recognition_name: String(input.recognition_name || input.ad_name || input.ad_title || '').trim(),
-                mapping_target_type: String(input.mapping_target_type || (input.product_item_key ? 'product' : 'group')).trim(),
+                mapping_target_type: targetType,
                 mapping_mode: String(input.mapping_mode || 'manual_v8').trim(),
                 carousel_key: String(input.carousel_key || '').trim(),
-                slide_key: String(input.slide_key || input.product_item_key || '').trim(),
+                slide_key: String(input.slide_key || productItemKey || '').trim(),
                 drive_folder: String(input.drive_folder || '').trim(),
                 main_folder: String(input.main_folder || '').trim(),
                 product_drive_path: String(input.product_drive_path || '').trim(),
@@ -594,7 +761,7 @@ export function installMappingCenter(app, options = {}) {
     app.get('/api/v8-mapping-center/health', (req, res) => {
         res.json({
             ok: mappingApiReady(),
-            version: 'railway_unified_mapping_center_v1',
+            version: 'railway_unified_mapping_center_v2',
             supabase_configured: mappingApiReady(),
             requires_admin_key: Boolean(MAPPING_ADMIN_KEY),
             legacy_drive_route_preserved: legacyDriveSlideLayers.length > 0

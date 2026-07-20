@@ -1,29 +1,378 @@
-function renderAll(){const s=state.data?.summary||{};$('sCurrent').textContent=state.currentAds.length;$('sMapped').textContent=state.currentAds.filter(x=>x.mapped).length;$('sUnmapped').textContent=state.currentAds.filter(x=>!x.mapped).length;$('sTotal').textContent=state.mappings.length;$('sImages').textContent=s.active_images||0;renderCurrent();renderMappings();renderProducts();renderRuntime();renderLog()}
-function mappingLabel(m){if(!m)return '<span class="badge bad">Chưa Mapping</span>';const name=m.product_item_key||m.product_group||'Chưa chọn';return `<span class="badge ok">Đã Mapping</span><div style="margin-top:5px"><b>${esc(name)}</b></div><div class="small muted">${esc(m.mapping_target_type||'-')} · ${esc(m.mapping_mode||'-')}</div>`}
-function currentRows(){let rows=[...state.currentAds];const q=$('currentSearch').value.toLowerCase().trim(),page=$('currentPage').value,st=$('currentState').value,sort=$('currentSort').value;rows=rows.filter(r=>(!page||r.page_id===page)&&(!st||(st==='mapped'?r.mapped:!r.mapped))&&(!q||[r.page_name,r.ad_title,r.ad_id,r.campaign_name,r.adset_name].join(' ').toLowerCase().includes(q)));if(sort==='customers')rows.sort((a,b)=>(b.customers||0)-(a.customers||0));else if(sort==='unmapped')rows.sort((a,b)=>Number(a.mapped)-Number(b.mapped)||new Date(b.last_referral||0)-new Date(a.last_referral||0));else rows.sort((a,b)=>new Date(b.last_referral||0)-new Date(a.last_referral||0));return rows}
-function renderCurrent(){const rows=currentRows(),body=$('currentBody');body.innerHTML=rows.length?'':`<tr><td colspan="6" class="empty">Không có QC phù hợp.</td></tr>`;for(const r of rows){const folders=r.mapping?.selected_folders||r.mapping?.drive_folders||[];const tr=document.createElement('tr');tr.innerHTML=`<td><b>${esc(r.ad_title||r.ad_name||'QC chưa có tên')}</b><div class="small muted">${esc(r.page_name||r.page_id||'-')}</div><div class="id">${esc(r.ad_id)}</div><div class="small muted">Lần cuối: ${fmtDate(r.last_referral)}</div></td><td>${esc(r.campaign_name||'-')}<div class="small muted">${esc(r.adset_name||'-')}</div></td><td><b>${r.customers||0}</b> khách<div class="small muted">${r.referrals||0} lượt · ${r.contacts||0} có liên hệ</div></td><td>${mappingLabel(r.mapping)}</td><td>${folders.length?folders.map(x=>`<div class="small">${esc(typeof x==='string'?x:(x.name||x.id||x.folder_id||''))}</div>`).join(''):'<span class="muted">Chưa gán</span>'}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(r).replace(/'/g,"&#39;")})'>${r.mapped?'Sửa':'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Test</button></div></td>`;body.appendChild(tr)}}
-function mappingCurrentInfo(adId){return state.currentAds.find(x=>String(x.ad_id)===String(adId))}
-function renderMappings(){const q=$('mappingSearch').value.toLowerCase().trim(),mode=$('mappingAge').value;let rows=state.mappings.filter(m=>!q||[m.ad_id,m.ad_name,m.product_group,m.product_item_key,m.drive_folder,m.notes].join(' ').toLowerCase().includes(q));rows=rows.filter(m=>{const cur=mappingCurrentInfo(m.ad_id);return mode==='all'||(mode==='current'?!!cur:!cur)});const body=$('mappingBody');body.innerHTML=rows.length?'':`<tr><td colspan="7" class="empty">Không có Mapping phù hợp.</td></tr>`;for(const m of rows){const cur=mappingCurrentInfo(m.ad_id),folders=m.selected_folders||m.drive_folders||[];const tr=document.createElement('tr');tr.innerHTML=`<td><b>${esc(m.ad_name||cur?.ad_title||'-')}</b><div class="id">${esc(m.ad_id)}</div>${m.is_active===false?'<span class="badge bad">Đã tắt</span>':''}</td><td><b>${esc(m.product_group||'-')}</b><div class="small">${esc(m.product_item_key||'Chưa chọn sản phẩm cụ thể')}</div></td><td>${esc(m.mapping_target_type||'-')}<div class="small muted">${esc(m.mapping_mode||'-')}</div></td><td>${folders.length?folders.map(x=>`<div class="small">${esc(typeof x==='string'?x:(x.name||x.id||''))}</div>`).join(''):esc(m.drive_folder||'-')}</td><td>${cur?`<span class="badge ok">Đang có khách</span><div class="small">${cur.customers||0} khách · ${fmtDate(cur.last_referral)}</div>`:'<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(m.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({...cur,mapping:m}).replace(/'/g,"&#39;")})'>Sửa</button>${m.is_active!==false?`<button class="danger" onclick="disableMapping('${esc(m.ad_id)}')">Tắt</button>`:''}</div></td>`;body.appendChild(tr)}}
-function catalogDescendantKeys(key){const children=new Map();for(const row of state.catalogs){const parent=String(row.parent_key||'');if(!children.has(parent))children.set(parent,[]);children.get(parent).push(String(row.catalog_key||''))}const result=new Set(),queue=[String(key||'')];while(queue.length){const current=queue.shift();if(!current||result.has(current))continue;result.add(current);for(const child of children.get(current)||[])queue.push(child)}return result}
-function imageCountFor(key){const keys=catalogDescendantKeys(key);return (state.data?.asset_summary?.by_catalog||[]).reduce((sum,row)=>sum+(keys.has(String(row.catalog_key||''))?Number(row.images||0):0),0)}
-function folderIdsFor(mapping){const values=Array.isArray(mapping?.drive_folder_ids)?mapping.drive_folder_ids:[],ids=values.map(value=>String(typeof value==='string'?value:(value?.id||value?.folder_id||value?.drive_folder_id||''))).filter(Boolean);if(!ids.length&&mapping?.drive_folder_id)ids.push(String(mapping.drive_folder_id));return [...new Set(ids)]}
-function productMappingRows(){const rows=[];for(const catalog of state.catalogs.filter(row=>row.is_sendable!==false)){const mappings=state.slideMappings.filter(row=>String(row.product_key)===String(catalog.catalog_key));if(mappings.length)rows.push(...mappings.map(mapping=>({...catalog,...mapping,_catalog_only:false})));else rows.push({...catalog,product_key:catalog.catalog_key,product_name:catalog.catalog_name,drive_folder_id:catalog.drive_folder_id,drive_folder_url:catalog.drive_folder_url,drive_folder_ids:catalog.drive_folder_id?[catalog.drive_folder_id]:[],page_id:null,is_active:true,sync_status:'catalog',_catalog_only:true})}for(const mapping of state.slideMappings){if(!state.catalogs.some(catalog=>String(catalog.catalog_key)===String(mapping.product_key)))rows.push({...mapping,_catalog_only:false})}return rows}
-function renderProducts(){const q=$('productSearch').value.toLowerCase().trim();const rows=productMappingRows().filter(m=>!q||[m.product_key,m.product_name,m.catalog_name,m.folder_path,m.drive_folder_id,JSON.stringify(m.drive_folder_ids||[])].join(' ').toLowerCase().includes(q));const body=$('productBody');body.innerHTML=rows.length?'':`<tr><td colspan="6" class="empty">Chưa có danh mục sản phẩm/Drive.</td></tr>`;for(const m of rows){const catalog=state.catalogs.find(c=>c.catalog_key===m.product_key),ids=folderIdsFor(m),cnt=imageCountFor(m.product_key);const tr=document.createElement('tr');tr.innerHTML=`<td><b>${esc(m.product_name||catalog?.catalog_name||m.product_key)}</b><div class="id">${esc(m.product_key)}</div><div class="small muted">${esc(m.folder_path||catalog?.folder_path||'')}</div></td><td>${esc(m.page_id||'Tất cả Page')}</td><td>${ids.length?ids.map(id=>{const f=state.folders.find(x=>String(x.folder_id)===String(id));return `<div>${esc(f?.folder_name||id)} <span class="small muted">(${f?.images||0} ảnh trực tiếp)</span></div>`}).join(''):'<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${cnt}</b>${cnt?'<span class="badge ok" style="margin-left:6px">Có ảnh</span>':'<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}</td><td>${m._catalog_only?'<span class="badge info">Theo catalog</span>':esc(m.sync_status||'-')}<div class="small muted">${fmtDate(m.last_synced_at)}</div></td><td><button onclick='openSlideMapping(${JSON.stringify(m).replace(/'/g,"&#39;")})'>${m._catalog_only?'Tạo Mapping':'Sửa'}</button></td>`;body.appendChild(tr)}}
-function renderRuntime(){const pages=state.data?.pages||[],runtime=state.data?.runtime||[],grid=$('runtimeGrid');grid.innerHTML='';for(const p of pages){const r=runtime.find(x=>x.page_id===p.page_id)||{page_id:p.page_id,mode:'OBSERVE',minimum_apply_confidence:.78,recent_context_minutes:60,use_ad_mapping:true,use_recent_context:true,use_slide_mapping:true};const div=document.createElement('div');div.className='runtime-card';div.innerHTML=`<h3 style="margin-top:0">${esc(p.page_name||p.page_id)}</h3><div class="id">${esc(p.page_id)}</div><div class="grid" style="margin-top:12px"><div class="field"><label>Chế độ</label><select id="rt_mode_${p.page_id}"><option ${r.mode==='OFF'?'selected':''}>OFF</option><option ${r.mode==='OBSERVE'?'selected':''}>OBSERVE</option><option ${r.mode==='ACTIVE'?'selected':''}>ACTIVE</option></select></div><div class="field"><label>Ngưỡng áp dụng</label><input id="rt_conf_${p.page_id}" type="number" min="0" max="1" step="0.01" value="${r.minimum_apply_confidence??.78}"></div><div class="field"><label>Giữ ngữ cảnh (phút)</label><input id="rt_min_${p.page_id}" type="number" min="5" value="${r.recent_context_minutes||60}"></div><div class="field"><label><input id="rt_ad_${p.page_id}" type="checkbox" ${r.use_ad_mapping!==false?'checked':''}> Dùng Ads Mapping</label><label><input id="rt_ctx_${p.page_id}" type="checkbox" ${r.use_recent_context!==false?'checked':''}> Dùng ngữ cảnh</label><label><input id="rt_slide_${p.page_id}" type="checkbox" ${r.use_slide_mapping!==false?'checked':''}> Dùng Slide Mapping</label></div></div><div class="form-actions"><button class="primary" onclick="saveRuntime('${p.page_id}')">Lưu Page này</button></div>`;grid.appendChild(div)}}
-function renderLog(){const rows=state.data?.change_log||[],body=$('logBody');body.innerHTML=rows.length?'':`<tr><td colspan="4" class="empty">Chưa có nhật ký Mapping.</td></tr>`;for(const r of rows){const tr=document.createElement('tr');tr.innerHTML=`<td>${fmtDate(r.created_at)}</td><td>${esc(r.action||'-')}</td><td>${esc(r.asset_type||'-')}<div class="id">${esc(r.asset_id||'')}</div></td><td><div class="small">${esc(JSON.stringify(r.details||r.after_data||r.metadata||{}))}</div></td>`;body.appendChild(tr)}}
-function openModal(id){$(id).classList.add('open')}function closeModal(id){$(id).classList.remove('open')}
-function setMulti(id,values){const set=new Set((values||[]).map(v=>String(typeof v==='string'?v:(v.id||v.folder_id||v.drive_folder_id||''))));[...$(id).options].forEach(o=>o.selected=set.has(o.value))}
-function selectedMulti(id){return [...$(id).selectedOptions].map(o=>o.value).filter(Boolean)}
-function openMapping(row){const m=row.mapping||row||{};$('mappingTitle').textContent=m.ad_id?'Sửa Mapping QC':'Thêm Mapping QC';$('m_ad_id').value=m.ad_id||row.ad_id||'';$('m_ad_name').value=m.ad_name||row.ad_title||'';$('m_page_name').value=row.page_name||row.page_id||'';$('m_campaign_name').value=m.campaign_name||row.campaign_name||'';$('m_adset_name').value=m.adset_name||row.adset_name||'';$('m_target').value=m.mapping_target_type||'product';$('m_group').value=m.product_group||'';$('m_catalog').value=m.product_item_key||'';$('m_recognition').value=m.recognition_name||m.ad_name||row.ad_title||'';$('m_notes').value=m.notes||'';$('m_active').checked=m.is_active!==false;$('m_campaign_id').value=m.campaign_id||row.campaign_id||'';$('m_adset_id').value=m.adset_id||row.adset_id||'';$('m_ad_account_id').value=m.ad_account_id||row.ad_account_id||'';$('m_ad_account_name').value=m.ad_account_name||row.ad_account_name||'';setMulti('m_folders',m.selected_folders||m.drive_folders||[]);openModal('mappingModal')}
-function suggestFoldersFromCatalog(){const key=$('m_catalog').value;if(!key)return;const cat=state.catalogs.find(c=>c.catalog_key===key);const ids=[];if(cat?.drive_folder_id)ids.push(cat.drive_folder_id);for(const f of state.folders)if((f.catalogs||[]).includes(key))ids.push(f.folder_id);if(ids.length)setMulti('m_folders',[...new Set(ids)])}
-async function saveMapping(e){e.preventDefault();busy(true);try{const body={ad_id:$('m_ad_id').value.trim(),ad_name:$('m_ad_name').value.trim(),campaign_id:$('m_campaign_id').value,campaign_name:$('m_campaign_name').value.trim(),adset_id:$('m_adset_id').value,adset_name:$('m_adset_name').value.trim(),ad_account_id:$('m_ad_account_id').value,ad_account_name:$('m_ad_account_name').value,mapping_target_type:$('m_target').value,product_group:$('m_group').value,product_item_key:$('m_catalog').value,recognition_name:$('m_recognition').value.trim(),selected_folders:selectedMulti('m_folders'),notes:$('m_notes').value.trim(),is_active:$('m_active').checked,enabled:$('m_active').checked};if(body.mapping_target_type==='scope'){body.product_item_key='';if(!body.product_group)body.product_group='general'}await api('/api/v8-mapping-center/ad-mapping',{method:'POST',body:JSON.stringify(body)});closeModal('mappingModal');await loadAll(false);status('Đã lưu Mapping QC và Bot sẽ dùng cho tin mới.')}catch(e){status(e.message,true)}finally{busy(false)}}
-async function disableMapping(adId){if(!confirm('Tắt Mapping này? QC sẽ quay về nhận diện theo lời khách/ngữ cảnh.'))return;busy(true);try{await api('/api/v8-mapping-center/ad-mapping/disable',{method:'POST',body:JSON.stringify({ad_id:adId})});await loadAll(false);status('Đã tắt Mapping.')}catch(e){status(e.message,true)}finally{busy(false)}}
-function openSlideMapping(m){$('sm_id').value=m.id||'';$('sm_product').value=m.product_key||'';$('sm_name').value=m.product_name||'';$('sm_page').value=m.page_id||'';$('sm_priority').value=m.priority||100;$('sm_active').checked=m.is_active!==false;$('sm_sync').checked=false;$('sm_note').value=m.note||'';const ids=[...(m.drive_folder_ids||[])];if(!ids.length&&m.drive_folder_id)ids.push(m.drive_folder_id);setMulti('sm_folders',ids);openModal('slideModal')}
-function fillSlideProductName(){const c=state.catalogs.find(x=>x.catalog_key===$('sm_product').value);if(c&&!$('sm_name').value)$('sm_name').value=c.catalog_name}
-async function saveSlideMapping(e){e.preventDefault();busy(true);try{const ids=selectedMulti('sm_folders');const c=state.catalogs.find(x=>x.catalog_key===$('sm_product').value);const first=state.folders.find(x=>x.folder_id===ids[0]);await api('/api/v8-mapping-center/slide-mapping',{method:'POST',body:JSON.stringify({id:$('sm_id').value||null,product_key:$('sm_product').value,product_name:$('sm_name').value||c?.catalog_name,page_id:$('sm_page').value||null,drive_folder_ids:ids,drive_folder_id:ids[0]||null,drive_folder_url:first?.folder_url||'',priority:Number($('sm_priority').value||100),is_active:$('sm_active').checked,request_sync:$('sm_sync').checked,note:$('sm_note').value})});closeModal('slideModal');await loadAll(false);status('Đã lưu Mapping sản phẩm/Drive.')}catch(e){status(e.message,true)}finally{busy(false)}}
-async function saveRuntime(pageId){busy(true);try{await api('/api/v8-mapping-center/runtime',{method:'POST',body:JSON.stringify({page_id:pageId,mode:$('rt_mode_'+pageId).value,minimum_apply_confidence:Number($('rt_conf_'+pageId).value),recent_context_minutes:Number($('rt_min_'+pageId).value),use_ad_mapping:$('rt_ad_'+pageId).checked,use_recent_context:$('rt_ctx_'+pageId).checked,use_slide_mapping:$('rt_slide_'+pageId).checked})});await loadAll(false);status('Đã lưu chế độ Mapping cho Page.')}catch(e){status(e.message,true)}finally{busy(false)}}
-async function runTest(){busy(true);try{const d=await api('/api/v8-mapping-center/test',{method:'POST',body:JSON.stringify({page_id:$('testPage').value,ad_id:$('testAdId').value.trim(),ad_title:$('testAdTitle').value.trim(),message_text:$('testText').value.trim()})});const r=d.result||{};$('testSummary').innerHTML=`<div class="notice"><div class="grid3"><div><b>Kết quả</b><div>${esc(r.status||'-')}</div></div><div><b>Nguồn</b><div>${esc(r.source||'-')}</div></div><div><b>Độ tin cậy</b><div>${esc(r.confidence??'-')}</div></div><div><b>Nhóm</b><div>${esc(r.group_key||'-')}</div></div><div><b>Catalog</b><div>${esc(r.catalog_key||'-')}</div></div><div><b>Áp dụng runtime</b><div>${r.apply_to_runtime?'<span class="badge ok">Có</span>':'<span class="badge warn">Không</span>'}</div></div><div><b>Mâu thuẫn</b><div>${r.conflict?'Có — lời khách thắng':'Không'}</div></div><div><b>Cần hỏi lại</b><div>${r.needs_clarification?'Có':'Không'}</div></div><div><b>Số ảnh</b><div>${r.slide_asset_count||0}</div></div></div></div>`;$('testAssets').innerHTML=(d.preview_assets||[]).map(a=>`<div class="asset"><img src="${esc(a.delivery_url||a.file_url||'')}" alt=""><div class="small" style="margin-top:6px">${esc(a.file_name||'Ảnh')}</div><div class="small muted">${esc(a.catalog_key||'')}</div></div>`).join('');$('testRaw').style.display='block';$('testRaw').textContent=JSON.stringify(d,null,2);status('Đã chạy test, không gửi khách thật.')}catch(e){status(e.message,true)}finally{busy(false)}}
-function quickTest(r){$('testPage').value=r.page_id||'';$('testAdId').value=r.ad_id||'';$('testAdTitle').value=r.ad_title||'';$('testText').value='gửi mẫu cho tôi';showTab('test',document.querySelector('[data-tab="test"]'));runTest()}
-function testCurrentMappingForm(){const page=(state.currentAds.find(x=>x.ad_id===$('m_ad_id').value)||{}).page_id||$('testPage').value;$('testPage').value=page;$('testAdId').value=$('m_ad_id').value;$('testAdTitle').value=$('m_ad_name').value;$('testText').value='gửi mẫu cho tôi';closeModal('mappingModal');showTab('test',document.querySelector('[data-tab="test"]'));runTest()}
-window.addEventListener('click',e=>{if(e.target.classList.contains('modal'))e.target.classList.remove('open')});
-loadAll(false);
+function mappingFolderIds(mapping) {
+  const preferred = Array.isArray(mapping?.resolved_folder_ids) && mapping.resolved_folder_ids.length
+    ? mapping.resolved_folder_ids
+    : (Array.isArray(mapping?.selected_folders) && mapping.selected_folders.length ? mapping.selected_folders : (mapping?.drive_folders || []));
+  return [...new Set((Array.isArray(preferred) ? preferred : []).map(value => String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || ''))).filter(Boolean))];
+}
+
+function mappingScope(mapping) {
+  if (!mapping) return { title: 'Chưa chọn', detail: '' };
+  if (mapping.product_item_key) {
+    const catalog = state.catalogs.find(row => row.catalog_key === mapping.product_item_key);
+    return { title: catalog?.catalog_name || mapping.product_item_key, detail: 'Sản phẩm/catalog cụ thể' };
+  }
+  if (mapping.product_group && mapping.product_group !== 'general') {
+    const group = state.groups.find(row => row.group_key === mapping.product_group);
+    return { title: group?.group_name || mapping.product_group, detail: 'Nhóm sản phẩm' };
+  }
+  const count = mappingFolderIds(mapping).length;
+  return { title: count ? `QC tổng hợp · ${count} thư mục` : 'QC tổng hợp', detail: count ? 'Phạm vi theo các thư mục đã chọn' : 'Chưa chọn phạm vi Drive' };
+}
+
+function mappingLabel(mapping) {
+  if (!mapping) return '<span class="badge bad">Chưa Mapping</span>';
+  const scope = mappingScope(mapping);
+  return `<span class="badge ok">Đã Mapping</span><div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small muted">${esc(scope.detail)}</div>`;
+}
+
+function currentRows() {
+  let rows = [...state.currentAds];
+  const businessId = $('currentBusiness').value;
+  const accountId = $('currentAccount').value;
+  const mappingState = $('currentState').value;
+  const sort = $('currentSort').value;
+  rows = rows.filter(row =>
+    (!businessId || String(row.business_id || '') === businessId) &&
+    (!accountId || String(row.ad_account_id || row.mapping?.ad_account_id || '') === accountId) &&
+    (!mappingState || (mappingState === 'mapped' ? row.mapped : !row.mapped))
+  );
+  if (sort === 'customers') rows.sort((a, b) => (b.customers || 0) - (a.customers || 0));
+  else if (sort === 'unmapped') rows.sort((a, b) => Number(a.mapped) - Number(b.mapped) || new Date(b.last_referral || 0) - new Date(a.last_referral || 0));
+  else rows.sort((a, b) => new Date(b.last_referral || 0) - new Date(a.last_referral || 0));
+  return rows;
+}
+
+function folderListHtml(mapping) {
+  const ids = mappingFolderIds(mapping);
+  if (!ids.length) return '<span class="muted">Chưa gán</span>';
+  const warning = mapping?.folder_sync_status === 'partial' ? '<div class="badge warn">Có đường dẫn cũ chưa đối chiếu được</div>' : '';
+  return ids.map(id => `<div class="small">📁 ${esc(folderName(id))}</div>`).join('') + warning;
+}
+
+function renderCurrent() {
+  const rows = currentRows();
+  const body = $('currentBody');
+  body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có QC phù hợp.</td></tr>';
+  for (const row of rows) {
+    const account = row.ad_account_name || row.ad_account_id || 'Chưa rõ tài khoản QC';
+    const business = row.business_name || (row.business_id ? `BM ${row.business_id}` : '');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><div class="small muted">${esc(account)}${business ? ` · ${esc(business)}` : ''}</div><b>${esc(row.ad_title || row.ad_name || 'QC chưa có tên')}</b><div class="small muted">${esc(row.page_name || row.page_id || '-')}</div><div class="id">${esc(row.ad_id)}</div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td>${esc(row.campaign_name || '-')}<div class="small muted">${esc(row.adset_name || '-')}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function mappingCurrentInfo(adId) { return state.currentAds.find(row => String(row.ad_id) === String(adId)); }
+
+function renderMappings() {
+  const query = $('mappingSearch').value.toLocaleLowerCase('vi-VN').trim();
+  const mode = $('mappingAge').value;
+  let rows = state.mappings.filter(mapping => !query || [mapping.ad_id, mapping.ad_name, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  rows = rows.filter(mapping => {
+    const current = mappingCurrentInfo(mapping.ad_id);
+    return mode === 'all' || (mode === 'current' ? Boolean(current) : !current);
+  });
+  const body = $('mappingBody');
+  body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có Mapping phù hợp.</td></tr>';
+  for (const mapping of rows) {
+    const current = mappingCurrentInfo(mapping.ad_id);
+    const scope = mappingScope(mapping);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${esc(mapping.ad_name || current?.ad_title || '-')}</b><div class="id">${esc(mapping.ad_id)}</div><div class="small muted">${esc(mapping.ad_account_name || mapping.ad_account_id || '')}</div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${current ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function catalogDescendantKeys(key) {
+  const children = new Map();
+  for (const row of state.catalogs) {
+    const parent = String(row.parent_key || '');
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(String(row.catalog_key || ''));
+  }
+  const result = new Set();
+  const queue = [String(key || '')];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || result.has(current)) continue;
+    result.add(current);
+    for (const child of children.get(current) || []) queue.push(child);
+  }
+  return result;
+}
+
+function imageCountFor(key) {
+  const keys = catalogDescendantKeys(key);
+  return (state.data?.asset_summary?.by_catalog || []).reduce((sum, row) => sum + (keys.has(String(row.catalog_key || '')) ? Number(row.images || 0) : 0), 0);
+}
+
+function folderIdsFor(mapping) {
+  const values = Array.isArray(mapping?.drive_folder_ids) ? mapping.drive_folder_ids : [];
+  const ids = values.map(value => String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || ''))).filter(Boolean);
+  if (!ids.length && mapping?.drive_folder_id) ids.push(String(mapping.drive_folder_id));
+  return [...new Set(ids)];
+}
+
+function productMappingRows() {
+  const rows = [];
+  for (const catalog of state.catalogs.filter(row => row.is_sendable !== false)) {
+    const mappings = state.slideMappings.filter(row => String(row.product_key) === String(catalog.catalog_key));
+    if (mappings.length) rows.push(...mappings.map(mapping => ({ ...catalog, ...mapping, _catalog_only: false })));
+    else rows.push({ ...catalog, product_key: catalog.catalog_key, product_name: catalog.catalog_name, drive_folder_id: catalog.drive_folder_id, drive_folder_url: catalog.drive_folder_url, drive_folder_ids: catalog.drive_folder_id ? [catalog.drive_folder_id] : [], page_id: null, is_active: true, sync_status: 'catalog', _catalog_only: true });
+  }
+  for (const mapping of state.slideMappings) {
+    if (!state.catalogs.some(catalog => String(catalog.catalog_key) === String(mapping.product_key))) rows.push({ ...mapping, _catalog_only: false });
+  }
+  return rows;
+}
+
+function renderProducts() {
+  const query = $('productSearch').value.toLocaleLowerCase('vi-VN').trim();
+  const rows = productMappingRows().filter(mapping => !query || [mapping.product_key, mapping.product_name, mapping.catalog_name, mapping.folder_path, mapping.drive_folder_id, JSON.stringify(mapping.drive_folder_ids || [])].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  const body = $('productBody');
+  body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Chưa có danh mục sản phẩm/Drive.</td></tr>';
+  for (const mapping of rows) {
+    const catalog = state.catalogs.find(row => row.catalog_key === mapping.product_key);
+    const ids = folderIdsFor(mapping);
+    const count = imageCountFor(mapping.product_key);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${ids.length ? ids.map(id => { const folder = state.folders.find(row => String(row.folder_id) === String(id)); return `<div>📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${folder?.images || 0} ảnh trực tiếp)</span></div>`; }).join('') : '<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${count}</b>${count ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}</td><td>${mapping._catalog_only ? '<span class="badge info">Theo catalog</span>' : esc(mapping.sync_status || '-')}<div class="small muted">${fmtDate(mapping.last_synced_at)}</div></td><td><button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>${mapping._catalog_only ? 'Tạo Mapping' : 'Sửa'}</button></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function renderRuntime() {
+  const pages = state.data?.pages || [];
+  const runtime = state.data?.runtime || [];
+  const grid = $('runtimeGrid');
+  grid.innerHTML = '';
+  for (const page of pages) {
+    const row = runtime.find(item => item.page_id === page.page_id) || { page_id: page.page_id, mode: 'OBSERVE', minimum_apply_confidence: 0.78, recent_context_minutes: 60, use_ad_mapping: true, use_recent_context: true, use_slide_mapping: true };
+    const div = document.createElement('div');
+    div.className = 'runtime-card';
+    div.innerHTML = `<h3 style="margin-top:0">${esc(page.page_name || page.page_id)}</h3><div class="id">${esc(page.page_id)}</div><div class="grid" style="margin-top:12px"><div class="field"><label>Chế độ</label><select id="rt_mode_${page.page_id}"><option ${row.mode === 'OFF' ? 'selected' : ''}>OFF</option><option ${row.mode === 'OBSERVE' ? 'selected' : ''}>OBSERVE</option><option ${row.mode === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option></select></div><div class="field"><label>Ngưỡng áp dụng</label><input id="rt_conf_${page.page_id}" type="number" min="0" max="1" step="0.01" value="${row.minimum_apply_confidence ?? 0.78}"></div><div class="field"><label>Giữ ngữ cảnh (phút)</label><input id="rt_min_${page.page_id}" type="number" min="5" value="${row.recent_context_minutes || 60}"></div><div class="field"><label><input id="rt_ad_${page.page_id}" type="checkbox" ${row.use_ad_mapping !== false ? 'checked' : ''}> Dùng Ads Mapping</label><label><input id="rt_ctx_${page.page_id}" type="checkbox" ${row.use_recent_context !== false ? 'checked' : ''}> Dùng ngữ cảnh</label><label><input id="rt_slide_${page.page_id}" type="checkbox" ${row.use_slide_mapping !== false ? 'checked' : ''}> Dùng Slide Mapping</label></div></div><div class="form-actions"><button class="primary" onclick="saveRuntime('${page.page_id}')">Lưu Page này</button></div>`;
+    grid.appendChild(div);
+  }
+}
+
+function renderLog() {
+  const rows = state.data?.change_log || [];
+  const body = $('logBody');
+  body.innerHTML = rows.length ? '' : '<tr><td colspan="4" class="empty">Chưa có nhật ký Mapping.</td></tr>';
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDate(row.created_at)}</td><td>${esc(row.action || '-')}</td><td>${esc(row.asset_type || '-')}<div class="id">${esc(row.asset_id || '')}</div></td><td><div class="small">${esc(JSON.stringify(row.details || row.after_data || row.metadata || {}))}</div></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function openModal(id) { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+
+function openMapping(row) {
+  const mapping = row.mapping || row || {};
+  $('mappingTitle').textContent = mapping.ad_id ? 'Sửa Mapping QC' : 'Thêm Mapping QC';
+  $('m_ad_id').value = mapping.ad_id || row.ad_id || '';
+  $('m_ad_name').value = mapping.ad_name || row.ad_title || '';
+  $('m_account_label').value = mapping.ad_account_name || row.ad_account_name || mapping.ad_account_id || row.ad_account_id || '';
+  $('m_page_name').value = row.page_name || row.page_id || '';
+  $('m_campaign_name').value = mapping.campaign_name || row.campaign_name || '';
+  $('m_adset_name').value = mapping.adset_name || row.adset_name || '';
+  $('m_group').value = mapping.product_group === 'general' ? '' : (mapping.product_group || '');
+  $('m_catalog').value = mapping.product_item_key || '';
+  $('m_notes').value = mapping.notes || '';
+  $('m_active').checked = mapping.is_active !== false;
+  $('m_campaign_id').value = mapping.campaign_id || row.campaign_id || '';
+  $('m_adset_id').value = mapping.adset_id || row.adset_id || '';
+  $('m_ad_account_id').value = mapping.ad_account_id || row.ad_account_id || '';
+  $('m_ad_account_name').value = mapping.ad_account_name || row.ad_account_name || '';
+  setFolderSelection('m_folders', mapping.resolved_folder_ids || mapping.selected_folders || mapping.drive_folders || []);
+  openModal('mappingModal');
+}
+
+function suggestFoldersFromCatalog() {
+  const key = $('m_catalog').value;
+  if (!key) return;
+  const catalog = state.catalogs.find(row => row.catalog_key === key);
+  const selection = folderSelection('m_folders');
+  if (catalog?.drive_folder_id) selection.add(String(catalog.drive_folder_id));
+  for (const folder of state.folders) if ((folder.catalogs || []).includes(key)) selection.add(String(folder.folder_id));
+  renderFolderPicker('m_folders');
+}
+
+async function saveMapping(event) {
+  event.preventDefault();
+  const folders = selectedFolderIds('m_folders');
+  if (!$('m_group').value && !$('m_catalog').value && !folders.length) {
+    status('Hãy chọn nhóm, sản phẩm hoặc ít nhất một thư mục Drive.', true);
+    return;
+  }
+  busy(true);
+  try {
+    const body = {
+      ad_id: $('m_ad_id').value.trim(),
+      ad_name: $('m_ad_name').value.trim(),
+      campaign_id: $('m_campaign_id').value,
+      campaign_name: $('m_campaign_name').value.trim(),
+      adset_id: $('m_adset_id').value,
+      adset_name: $('m_adset_name').value.trim(),
+      ad_account_id: $('m_ad_account_id').value,
+      ad_account_name: $('m_ad_account_name').value,
+      product_group: $('m_group').value,
+      product_item_key: $('m_catalog').value,
+      selected_folders: folders,
+      notes: $('m_notes').value.trim(),
+      is_active: $('m_active').checked,
+      enabled: $('m_active').checked
+    };
+    await api('/api/v8-mapping-center/ad-mapping', { method: 'POST', body: JSON.stringify(body) });
+    closeModal('mappingModal');
+    await loadAll(false);
+    status(`Đã lưu Mapping QC với ${folders.length} thư mục Drive.`);
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function disableMapping(adId) {
+  if (!confirm('Tắt Mapping này? QC sẽ quay về nhận diện theo lời khách/ngữ cảnh.')) return;
+  busy(true);
+  try {
+    await api('/api/v8-mapping-center/ad-mapping/disable', { method: 'POST', body: JSON.stringify({ ad_id: adId }) });
+    await loadAll(false);
+    status('Đã tắt Mapping.');
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+function openSlideMapping(mapping) {
+  $('sm_id').value = mapping.id || '';
+  $('sm_product').value = mapping.product_key || '';
+  $('sm_name').value = mapping.product_name || '';
+  $('sm_page').value = mapping.page_id || '';
+  $('sm_priority').value = mapping.priority || 100;
+  $('sm_active').checked = mapping.is_active !== false;
+  $('sm_sync').checked = false;
+  $('sm_note').value = mapping.note || '';
+  const ids = [...(mapping.drive_folder_ids || [])];
+  if (!ids.length && mapping.drive_folder_id) ids.push(mapping.drive_folder_id);
+  setFolderSelection('sm_folders', ids);
+  openModal('slideModal');
+}
+
+function fillSlideProductName() {
+  const catalog = state.catalogs.find(row => row.catalog_key === $('sm_product').value);
+  if (catalog && !$('sm_name').value) $('sm_name').value = catalog.catalog_name;
+}
+
+async function saveSlideMapping(event) {
+  event.preventDefault();
+  busy(true);
+  try {
+    const ids = selectedFolderIds('sm_folders');
+    if (!ids.length) throw new Error('Hãy chọn ít nhất một thư mục Drive.');
+    const catalog = state.catalogs.find(row => row.catalog_key === $('sm_product').value);
+    const first = state.folders.find(row => row.folder_id === ids[0]);
+    await api('/api/v8-mapping-center/slide-mapping', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: $('sm_id').value || null,
+        product_key: $('sm_product').value,
+        product_name: $('sm_name').value || catalog?.catalog_name,
+        page_id: $('sm_page').value || null,
+        drive_folder_ids: ids,
+        drive_folder_id: ids[0] || null,
+        drive_folder_url: first?.folder_url || '',
+        priority: Number($('sm_priority').value || 100),
+        is_active: $('sm_active').checked,
+        request_sync: $('sm_sync').checked,
+        note: $('sm_note').value
+      })
+    });
+    closeModal('slideModal');
+    await loadAll(false);
+    status(`Đã lưu Mapping sản phẩm với ${ids.length} thư mục Drive.`);
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function saveRuntime(pageId) {
+  busy(true);
+  try {
+    await api('/api/v8-mapping-center/runtime', {
+      method: 'POST',
+      body: JSON.stringify({
+        page_id: pageId,
+        mode: $('rt_mode_' + pageId).value,
+        minimum_apply_confidence: Number($('rt_conf_' + pageId).value),
+        recent_context_minutes: Number($('rt_min_' + pageId).value),
+        use_ad_mapping: $('rt_ad_' + pageId).checked,
+        use_recent_context: $('rt_ctx_' + pageId).checked,
+        use_slide_mapping: $('rt_slide_' + pageId).checked
+      })
+    });
+    await loadAll(false);
+    status('Đã lưu chế độ Mapping cho Page.');
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function runTest() {
+  busy(true);
+  try {
+    const data = await api('/api/v8-mapping-center/test', {
+      method: 'POST',
+      body: JSON.stringify({
+        page_id: $('testPage').value,
+        ad_id: $('testAdId').value.trim(),
+        ad_title: $('testAdTitle').value.trim(),
+        message_text: $('testText').value.trim()
+      })
+    });
+    const result = data.result || {};
+    $('testSummary').innerHTML = `<div class="notice"><div class="grid3"><div><b>Kết quả</b><div>${esc(result.status || '-')}</div></div><div><b>Nguồn</b><div>${esc(result.source || '-')}</div></div><div><b>Độ tin cậy</b><div>${esc(result.confidence ?? '-')}</div></div><div><b>Nhóm</b><div>${esc(result.group_key || '-')}</div></div><div><b>Catalog</b><div>${esc(result.catalog_key || (result.status === 'folder_scope' ? 'QC tổng hợp theo thư mục' : '-'))}</div></div><div><b>Áp dụng runtime</b><div>${result.apply_to_runtime ? '<span class="badge ok">Có</span>' : '<span class="badge warn">Không</span>'}</div></div><div><b>Mâu thuẫn</b><div>${result.conflict ? 'Có — lời khách thắng' : 'Không'}</div></div><div><b>Cần hỏi lại</b><div>${result.needs_clarification ? 'Có' : 'Không'}</div></div><div><b>Số ảnh</b><div>${result.slide_asset_count || 0}</div></div></div></div>`;
+    $('testAssets').innerHTML = (data.preview_assets || []).map(asset => `<div class="asset"><img src="${esc(asset.delivery_url || asset.file_url || '')}" alt=""><div class="small" style="margin-top:6px">${esc(asset.file_name || 'Ảnh')}</div><div class="small muted">${esc(asset.catalog_key || '')}</div></div>`).join('');
+    $('testRaw').style.display = 'block';
+    $('testRaw').textContent = JSON.stringify(data, null, 2);
+    status('Đã chạy test, không gửi khách thật.');
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+function quickTest(row) {
+  $('testPage').value = row.page_id || '';
+  $('testAdId').value = row.ad_id || '';
+  $('testAdTitle').value = row.ad_title || '';
+  $('testText').value = 'gửi mẫu cho tôi';
+  showTab('test');
+  runTest();
+}
+
+function testCurrentMappingForm() {
+  const page = (state.currentAds.find(row => row.ad_id === $('m_ad_id').value) || {}).page_id || $('testPage').value;
+  $('testPage').value = page;
+  $('testAdId').value = $('m_ad_id').value;
+  $('testAdTitle').value = $('m_ad_name').value;
+  $('testText').value = 'gửi mẫu cho tôi';
+  closeModal('mappingModal');
+  showTab('test');
+  runTest();
+}
+
+window.addEventListener('click', event => {
+  if (event.target.classList.contains('modal')) event.target.classList.remove('open');
+});

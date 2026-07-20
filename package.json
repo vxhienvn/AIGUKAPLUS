@@ -8,7 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node start.js"
+    "start": "node start.js",
+    "test:mapping-center": "node --test tests/mapping-center-route.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",
