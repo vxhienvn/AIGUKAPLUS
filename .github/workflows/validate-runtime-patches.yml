@@ -28,6 +28,7 @@ jobs:
           node --check patch-v7-daily-runtime-self-contained.js
           node --check patch-v7-leads-meta-primary.js
           node --check patch-v7-leads-referral-source.js
+          node --check patch-v7-null-safety.js
           node --check patch-v7-runtime-integrity.js
           node --check start.js
 
@@ -42,6 +43,7 @@ jobs:
             'patch-v7-daily-runtime-self-contained.js',
             'patch-v7-leads-meta-primary.js',
             'patch-v7-leads-referral-source.js',
+            'patch-v7-null-safety.js',
             'patch-v7-runtime-integrity.js',
           ];
           const positions=names.map(name=>source.indexOf(name));
@@ -67,7 +69,8 @@ jobs:
 
       - name: Build final dashboard and smoke both routes
         env:
-          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          # Synthetic CI must not trigger the production-schema probe. That probe
+          # runs at real startup only when an actual service-role key is present.
           SUPABASE_URL: https://example.supabase.co
         run: |
           cat > v7-dashboard-stable.js <<'EOF'
@@ -81,12 +84,14 @@ jobs:
           async function fetchJson(){ return {}; }
           function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
           function filterForm(){ return ''; }
-          function layout(_title,body){ return '<html><body>'+body+'</body></html>'; }
+          function layout(_title,body){ return `<html><body>${body}</body></html>`; }
           async function getAccounts(){ return []; }
           async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
           async function fetchPancake(){ return { rows: [], error: null }; }
           async function fetchDaily(){ return { rows: [], errors: [], totalSpend: 0, totalMessages: 0 }; }
           function mapLeads(){ return []; }
+          async function dashboardPage(req,res) {}
+
           async function dailyPage(req,res) {}
 
           async function leadsPage(req,res) {}
@@ -104,6 +109,7 @@ jobs:
           node patch-v7-daily-runtime-self-contained.js
           node patch-v7-leads-meta-primary.js
           node patch-v7-leads-referral-source.js
+          node patch-v7-null-safety.js
           node patch-v7-runtime-integrity.js
           node --check v7-dashboard-stable.js
 

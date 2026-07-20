@@ -13,6 +13,15 @@ const idFromUrl = (value) => clean(value).match(/(?:folders\/|\/d\/|[?&]id=)([-\
 const isFolder = (mime = "") => mime === "application/vnd.google-apps.folder";
 const isImage = (mime = "") => /^image\//i.test(mime);
 const uniqueBy = (rows, keyFn) => [...new Map(rows.map((row) => [keyFn(row), row])).values()];
+const folderRef = (value) => {
+  if (typeof value === "string") return { id: idFromUrl(value), name: "", path: "", parent_id: null };
+  return {
+    id: idFromUrl(value?.id || value?.folder_id || value?.drive_folder_id || ""),
+    name: clean(value?.name || value?.folder_name),
+    path: clean(value?.path || value?.folder_path),
+    parent_id: idFromUrl(value?.parent_id || value?.parent_folder_id || "") || null,
+  };
+};
 
 export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, serviceRoleKey }) {
   const dbKey = serviceRoleKey || publishableKey;
@@ -163,7 +172,8 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
   const listFolderTree = async (row, rootFolderId, maxDepth = 7) => {
     const rootId = idFromUrl(rootFolderId);
     const rootInfo = await driveRequest(row, `files/${encodeURIComponent(rootId)}`, { query: { fields: "id,name,mimeType" } });
-    const rows = [{ id: rootId, name: rootInfo.name || "Thư mục gốc", path: rootInfo.name || "Thư mục gốc", parent_id: null, depth: 0 }];
+    const rows = [{ id: rootId, name: rootInfo.name || "Thư mục gốc", path: rootInfo.name || "Thư mục gốc", parent_id: null, depth: 0, direct_images: 0 }];
+    const byId = new Map(rows.map((folder) => [folder.id, folder]));
     const queue = [{ id: rootId, path: rootInfo.name || "Thư mục gốc", depth: 0 }];
     const visited = new Set();
     while (queue.length && visited.size < 600) {
@@ -171,17 +181,53 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
       if (!current?.id || visited.has(current.id)) continue;
       visited.add(current.id);
       const children = await listFolder(row, current.id);
+      const currentRow = byId.get(current.id);
+      if (currentRow) currentRow.direct_images = children.filter((item) => isImage(item.mimeType)).length;
       for (const child of children.filter((item) => isFolder(item.mimeType))) {
-        const next = { id: child.id, name: child.name, path: `${current.path} / ${child.name}`, parent_id: current.id, depth: current.depth + 1 };
+        const next = { id: child.id, name: child.name, path: `${current.path} / ${child.name}`, parent_id: current.id, depth: current.depth + 1, direct_images: 0 };
         rows.push(next);
+        byId.set(next.id, next);
         if (next.depth < maxDepth) queue.push(next);
       }
     }
+    const childrenByParent = new Map();
+    for (const folder of rows) {
+      if (!folder.parent_id) continue;
+      const children = childrenByParent.get(folder.parent_id) || [];
+      children.push(folder.id);
+      childrenByParent.set(folder.parent_id, children);
+    }
+    const memo = new Map();
+    const summarize = (id, visiting = new Set()) => {
+      if (memo.has(id)) return memo.get(id);
+      if (visiting.has(id)) return { images: 0, descendants: 0 };
+      const folder = byId.get(id);
+      if (!folder) return { images: 0, descendants: 0 };
+      let images = Number(folder.direct_images || 0);
+      let descendants = 0;
+      const nextVisiting = new Set(visiting).add(id);
+      for (const childId of childrenByParent.get(id) || []) {
+        const child = summarize(childId, nextVisiting);
+        images += child.images;
+        descendants += 1 + child.descendants;
+      }
+      const result = { images, descendants };
+      memo.set(id, result);
+      return result;
+    };
+    for (const folder of rows) {
+      const summary = summarize(folder.id);
+      folder.images = summary.images;
+      folder.child_count = summary.descendants;
+      folder.direct_child_count = (childrenByParent.get(folder.id) || []).length;
+    }
     return rows;
   };
-  const listImagesRecursive = async (row, rootFolderId, maxDepth = 7) => {
+  const listImagesRecursive = async (row, rootFolderId, maxDepth = 7, rootLabel = "") => {
     const images = [];
-    const queue = [{ id: idFromUrl(rootFolderId), name: "", path: "", depth: 0 }];
+    const rootPath = clean(rootLabel).replace(/\s*\/\s*/g, " / ");
+    const rootName = rootPath.split(/\s*\/\s*/).filter(Boolean).at(-1) || "";
+    const queue = [{ id: idFromUrl(rootFolderId), name: rootName, path: rootPath, parent_id: null, depth: 0 }];
     const visited = new Set();
     while (queue.length && visited.size < 800 && images.length < 3000) {
       const folder = queue.shift();
@@ -189,8 +235,8 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
       visited.add(folder.id);
       const items = await listFolder(row, folder.id);
       for (const item of items) {
-        if (isFolder(item.mimeType) && folder.depth < maxDepth) queue.push({ id: item.id, name: item.name, path: folder.path ? `${folder.path} / ${item.name}` : item.name, depth: folder.depth + 1 });
-        else if (isImage(item.mimeType)) images.push({ ...item, parent_folder_id: folder.id, parent_folder_name: folder.name, parent_folder_path: folder.path });
+        if (isFolder(item.mimeType) && folder.depth < maxDepth) queue.push({ id: item.id, name: item.name, path: folder.path ? `${folder.path} / ${item.name}` : item.name, parent_id: folder.id, depth: folder.depth + 1 });
+        else if (isImage(item.mimeType)) images.push({ ...item, parent_folder_id: folder.id, parent_folder_name: folder.name, parent_folder_path: folder.path, parent_folder_parent_id: folder.parent_id });
       }
     }
     return { images, folders_scanned: visited.size };
@@ -334,7 +380,7 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
       const body = req.body || {};
       const productKey = clean(body.product_key);
       const productName = clean(body.product_name || productKey);
-      const folders = uniqueBy((Array.isArray(body.drive_folder_ids) ? body.drive_folder_ids : []).map((item) => ({ id: idFromUrl(item?.id), name: clean(item?.name), path: clean(item?.path) })).filter((item) => item.id), (item) => item.id);
+      const folders = uniqueBy((Array.isArray(body.drive_folder_ids) ? body.drive_folder_ids : []).map(folderRef).filter((item) => item.id), (item) => item.id);
       if (!productKey) throw new Error("Cần nhập mã sản phẩm");
       if (!productName) throw new Error("Cần nhập tên sản phẩm");
       if (!folders.length) throw new Error("Hãy chọn ít nhất một thư mục trong cây Google Drive");
@@ -355,20 +401,20 @@ export function installDriveSlideManagerV4(app, { supabaseUrl, publishableKey, s
       const mapping = (await db(`v8_slide_mapping?id=eq.${encodeURIComponent(mappingId)}&select=*&limit=1`))?.[0];
       if (!mapping) throw new Error("Không tìm thấy mapping");
       const rawFolders = Array.isArray(mapping.drive_folder_ids) && mapping.drive_folder_ids.length ? mapping.drive_folder_ids : [{ id: mapping.drive_folder_id, name: mapping.product_name, path: mapping.product_name }];
-      const folders = uniqueBy(rawFolders.map((item) => ({ id: idFromUrl(item?.id), name: clean(item?.name), path: clean(item?.path) })).filter((item) => item.id), (item) => item.id);
+      const folders = uniqueBy(rawFolders.map(folderRef).filter((item) => item.id), (item) => item.id);
       if (!folders.length) throw new Error("Mapping chưa chọn thư mục Drive");
       let foldersScanned = 0;
       const collected = [];
       for (const folder of folders) {
-        const scan = await listImagesRecursive(row, folder.id);
+        const scan = await listImagesRecursive(row, folder.id, 7, folder.path || folder.name || mapping.product_name);
         foldersScanned += scan.folders_scanned;
         for (const item of scan.images) collected.push({ ...item, selected_root_id: folder.id, selected_root_name: folder.name, selected_root_path: folder.path });
       }
       const images = uniqueBy(collected, (item) => item.id);
       let count = 0;
       for (const [index, item] of images.entries()) {
-        const assetRow = { product_key: mapping.product_key, product_name: mapping.product_name, catalog_key: mapping.product_key, root_folder_url: `https://drive.google.com/drive/folders/${item.selected_root_id}`, parent_folder_id: item.parent_folder_id || item.selected_root_id, parent_folder_name: item.parent_folder_name || item.selected_root_name || "", parent_folder_url: `https://drive.google.com/drive/folders/${item.parent_folder_id || item.selected_root_id}`, drive_file_id: item.id, file_name: item.name, mime_type: item.mimeType, file_url: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`, delivery_url: `https://drive.google.com/uc?export=view&id=${item.id}`, file_size: item.size ? Number(item.size) : null, created_time: item.createdTime || null, modified_time: item.modifiedTime || null, sort_order: index + 1, is_image: true, is_active: true, last_seen_at: new Date().toISOString(), deleted_from_drive_at: null };
-        const existing = await db(`v8_drive_assets?drive_file_id=eq.${encodeURIComponent(item.id)}&select=id&limit=1`);
+        const existing = await db(`v8_drive_assets?drive_file_id=eq.${encodeURIComponent(item.id)}&select=id,metadata&limit=1`);
+        const assetRow = { product_key: mapping.product_key, product_name: mapping.product_name, catalog_key: mapping.product_key, root_folder_url: `https://drive.google.com/drive/folders/${item.selected_root_id}`, parent_folder_id: item.parent_folder_id || item.selected_root_id, parent_folder_name: item.parent_folder_name || item.selected_root_name || mapping.product_name || "", parent_folder_url: `https://drive.google.com/drive/folders/${item.parent_folder_id || item.selected_root_id}`, drive_file_id: item.id, file_name: item.name, mime_type: item.mimeType, file_url: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`, delivery_url: `https://drive.google.com/uc?export=view&id=${item.id}`, file_size: item.size ? Number(item.size) : null, created_time: item.createdTime || null, modified_time: item.modifiedTime || null, sort_order: index + 1, is_image: true, is_active: true, last_seen_at: new Date().toISOString(), deleted_from_drive_at: null, metadata: { ...(existing?.[0]?.metadata && typeof existing[0].metadata === "object" ? existing[0].metadata : {}), catalog_key: mapping.product_key, folder_path: item.parent_folder_path || item.selected_root_path || item.selected_root_name || mapping.product_name, folder_parent_id: item.parent_folder_parent_id || null, selected_root_folder_id: item.selected_root_id, selected_root_folder_path: item.selected_root_path || item.selected_root_name || mapping.product_name } };
         if (existing?.[0]?.id) await db(`v8_drive_assets?id=eq.${encodeURIComponent(existing[0].id)}`, { method: "PATCH", body: assetRow });
         else await db("v8_drive_assets", { method: "POST", body: assetRow });
         count++;

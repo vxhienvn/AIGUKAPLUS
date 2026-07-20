@@ -132,6 +132,22 @@ export function installMappingCenter(app, options = {}) {
     }
     app.get('/drive-slides', (_req, res) => res.sendFile(path.join(publicDirectory, 'drive-slides-v8.html')));
 
+    function mappingFolderValues(mapping) {
+        const preferred = Array.isArray(mapping?.resolved_folder_ids) && mapping.resolved_folder_ids.length
+            ? mapping.resolved_folder_ids
+            : (Array.isArray(mapping?.selected_folders) && mapping.selected_folders.length
+                ? mapping.selected_folders
+                : (Array.isArray(mapping?.drive_folders) ? mapping.drive_folders : []));
+        return preferred.map(folderToken).filter(Boolean);
+    }
+
+    function mappingHasScope(mapping) {
+        if (!mapping || mapping.is_active === false || mapping.enabled === false) return false;
+        const productItemKey = String(mapping.product_item_key || '').trim();
+        const productGroup = String(mapping.product_group || '').trim();
+        return Boolean(productItemKey || (productGroup && productGroup !== 'general') || mappingFolderValues(mapping).length);
+    }
+
     function aggregateCurrentAds(referrals = [], mappings = []) {
         const mappingByAd = new Map((Array.isArray(mappings) ? mappings : []).map(row => [String(row.ad_id || ''), row]));
         const byKey = new Map();
@@ -168,11 +184,16 @@ export function installMappingCenter(app, options = {}) {
             const mapping = mappingByAd.get(row.ad_id) || null;
             return {
                 ...row,
+                ad_title: row.ad_title || mapping?.ad_name || '',
                 customers: row.customers.size,
                 contacts: row.contacts.size,
                 ad_account_id: mapping?.ad_account_id || '',
                 ad_account_name: mapping?.ad_account_name || '',
-                mapped: Boolean(mapping && mapping.is_active !== false && mapping.enabled !== false),
+                campaign_id: mapping?.campaign_id || '',
+                campaign_name: mapping?.campaign_name || '',
+                adset_id: mapping?.adset_id || '',
+                adset_name: mapping?.adset_name || '',
+                mapped: mappingHasScope(mapping),
                 mapping
             };
         }).sort((a, b) => new Date(b.last_referral || 0) - new Date(a.last_referral || 0));
@@ -183,6 +204,10 @@ export function installMappingCenter(app, options = {}) {
         const folders = new Map();
         for (const row of Array.isArray(assets) ? assets : []) {
             const catalogKey = String(row.catalog_key || row.product_key || '').trim();
+            let metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+            if (typeof row.metadata === 'string') {
+                try { metadata = JSON.parse(row.metadata); } catch (_) { metadata = {}; }
+            }
             if (catalogKey) {
                 const current = byCatalog.get(catalogKey) || { catalog_key: catalogKey, product_key: row.product_key || '', images: 0, verified: 0, errors: 0, folders: new Set() };
                 current.images += 1;
@@ -193,15 +218,21 @@ export function installMappingCenter(app, options = {}) {
             }
             const folderId = String(row.parent_folder_id || '').trim();
             if (folderId) {
+                const folderPath = String(metadata.folder_path || metadata.parent_folder_path || row.parent_folder_name || folderId).trim();
                 const folder = folders.get(folderId) || {
                     folder_id: folderId,
                     folder_name: row.parent_folder_name || folderId,
-                    folder_path: row.parent_folder_name || folderId,
+                    folder_path: folderPath,
                     folder_url: row.parent_folder_url || '',
-                    images: 0,
+                    parent_folder_id: String(metadata.folder_parent_id || metadata.parent_folder_parent_id || '').trim() || null,
+                    direct_images: 0,
                     catalogs: new Set()
                 };
-                folder.images += 1;
+                if ((!folder.folder_path || folder.folder_path === folder.folder_name) && folderPath) folder.folder_path = folderPath;
+                if (!folder.parent_folder_id && (metadata.folder_parent_id || metadata.parent_folder_parent_id)) {
+                    folder.parent_folder_id = String(metadata.folder_parent_id || metadata.parent_folder_parent_id);
+                }
+                folder.direct_images += 1;
                 if (catalogKey) folder.catalogs.add(catalogKey);
                 folders.set(folderId, folder);
             }
@@ -210,6 +241,69 @@ export function installMappingCenter(app, options = {}) {
             by_catalog: [...byCatalog.values()].map(row => ({ ...row, folders: [...row.folders] })),
             folders: [...folders.values()].map(row => ({ ...row, catalogs: [...row.catalogs] })).sort((a, b) => a.folder_name.localeCompare(b.folder_name, 'vi'))
         };
+    }
+
+    function finalizeFolderHierarchy(rows = []) {
+        const folders = (Array.isArray(rows) ? rows : []).map(row => ({
+            ...row,
+            folder_id: String(row.folder_id || '').trim(),
+            folder_name: String(row.folder_name || row.folder_id || '').trim(),
+            folder_path: String(row.folder_path || row.folder_name || row.folder_id || '').trim().replace(/\s*\/\s*/g, '/'),
+            parent_folder_id: String(row.parent_folder_id || row.parent_id || '').trim() || null,
+            direct_images: Number(row.direct_images ?? row.images ?? 0) || 0,
+            catalogs: [...new Set(Array.isArray(row.catalogs) ? row.catalogs.map(String).filter(Boolean) : [])]
+        })).filter(row => row.folder_id);
+        const byId = new Map(folders.map(row => [row.folder_id, row]));
+        const byPath = new Map();
+        for (const row of folders) {
+            const normalized = normalizedFolderPath(row.folder_path);
+            if (!normalized) continue;
+            const ids = byPath.get(normalized) || [];
+            ids.push(row.folder_id);
+            byPath.set(normalized, ids);
+        }
+        for (const row of folders) {
+            if (row.parent_folder_id && byId.has(row.parent_folder_id) && row.parent_folder_id !== row.folder_id) continue;
+            row.parent_folder_id = null;
+            const segments = normalizedFolderPath(row.folder_path).split('/').filter(Boolean);
+            while (segments.length > 1 && !row.parent_folder_id) {
+                segments.pop();
+                const candidates = (byPath.get(segments.join('/')) || []).filter(id => id !== row.folder_id);
+                if (candidates.length === 1) row.parent_folder_id = candidates[0];
+            }
+        }
+        const children = new Map();
+        for (const row of folders) {
+            if (!row.parent_folder_id || !byId.has(row.parent_folder_id)) continue;
+            const list = children.get(row.parent_folder_id) || [];
+            list.push(row.folder_id);
+            children.set(row.parent_folder_id, list);
+        }
+        const memo = new Map();
+        const summarize = (id, visiting = new Set()) => {
+            if (memo.has(id)) return memo.get(id);
+            const row = byId.get(id);
+            if (!row || visiting.has(id)) return { images: 0, descendants: 0 };
+            const nextVisiting = new Set(visiting).add(id);
+            let images = row.direct_images;
+            let descendants = 0;
+            for (const childId of children.get(id) || []) {
+                const child = summarize(childId, nextVisiting);
+                images += child.images;
+                descendants += 1 + child.descendants;
+            }
+            const result = { images, descendants };
+            memo.set(id, result);
+            return result;
+        };
+        for (const row of folders) {
+            const summary = summarize(row.folder_id);
+            row.images = summary.images;
+            row.total_images = summary.images;
+            row.direct_child_count = (children.get(row.folder_id) || []).length;
+            row.child_count = summary.descendants;
+        }
+        return folders;
     }
 
     function mergeConfiguredFolders(assetSummary, catalogs = [], slideMappings = []) {
@@ -222,21 +316,28 @@ export function installMappingCenter(app, options = {}) {
                 folder_name: fallback.folder_name || value?.name || value?.path || id,
                 folder_path: fallback.folder_path || value?.path || value?.name || id,
                 folder_url: fallback.folder_url || value?.url || `https://drive.google.com/drive/folders/${id}`,
-                images: 0,
+                parent_folder_id: fallback.parent_folder_id || value?.parent_id || value?.parent_folder_id || null,
+                direct_images: 0,
                 catalogs: []
             };
             if ((!current.folder_path || current.folder_path === current.folder_name) && fallback.folder_path) {
                 current.folder_path = fallback.folder_path;
             }
+            if (!current.parent_folder_id && (fallback.parent_folder_id || value?.parent_id || value?.parent_folder_id)) {
+                current.parent_folder_id = String(fallback.parent_folder_id || value?.parent_id || value?.parent_folder_id);
+            }
             const catalogKey = String(fallback.catalog_key || '').trim();
             current.catalogs = [...new Set([...(current.catalogs || []), ...(catalogKey ? [catalogKey] : [])])];
             folders.set(id, current);
         };
+        const catalogByKey = new Map((Array.isArray(catalogs) ? catalogs : []).map(row => [String(row.catalog_key || ''), row]));
         for (const catalog of Array.isArray(catalogs) ? catalogs : []) {
+            const parentCatalog = catalogByKey.get(String(catalog.parent_key || ''));
             addFolder(catalog.drive_folder_id, {
-                folder_name: catalog.folder_path || catalog.catalog_name,
+                folder_name: catalog.catalog_name,
                 folder_path: catalog.folder_path || catalog.catalog_name,
                 folder_url: catalog.drive_folder_url,
+                parent_folder_id: parentCatalog?.drive_folder_id || null,
                 catalog_key: catalog.catalog_key
             });
         }
@@ -249,7 +350,7 @@ export function installMappingCenter(app, options = {}) {
                 catalog_key: mapping.product_key
             });
         }
-        assetSummary.folders = [...folders.values()].sort((a, b) => String(a.folder_name).localeCompare(String(b.folder_name), 'vi'));
+        assetSummary.folders = finalizeFolderHierarchy([...folders.values()]);
         return assetSummary;
     }
 
@@ -330,11 +431,12 @@ export function installMappingCenter(app, options = {}) {
                 ? mapping.selected_folders
                 : (Array.isArray(mapping.drive_folders) ? mapping.drive_folders : []);
             const resolvedFolderIds = canonicalFolderIds(stored, lookup);
-            return {
+            const normalized = {
                 ...mapping,
                 resolved_folder_ids: resolvedFolderIds,
                 folder_sync_status: !stored.length ? 'empty' : (resolvedFolderIds.length === stored.length ? 'synced' : 'partial')
             };
+            return { ...normalized, scope_status: mappingHasScope(normalized) ? 'ready' : 'missing_scope' };
         });
     }
 
@@ -469,7 +571,10 @@ export function installMappingCenter(app, options = {}) {
                 return [];
             }
         }));
-        const visibleStatuses = new Set(['ACTIVE', 'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED']);
+        const visibleStatuses = new Set([
+            'ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED',
+            'PENDING_REVIEW', 'IN_PROCESS', 'WITH_ISSUES', 'PREAPPROVED', 'DISAPPROVED'
+        ]);
         const rows = batches.flat().filter(row => row.ad_id && visibleStatuses.has(String(row.effective_status || row.status || '').toUpperCase()));
         metaAdsCache.rows = rows;
         metaAdsCache.adAccounts = adAccounts;
@@ -490,7 +595,7 @@ export function installMappingCenter(app, options = {}) {
                 safeSupabaseRest('ad_mappings?select=*&order=updated_at.desc&limit=2000'),
                 safeSupabaseRest('v8_slide_mapping?select=*&order=priority.asc,product_name.asc&limit=1000'),
                 safeSupabaseRest(`v8_meta_ad_referral_entries?select=page_id,page_name,sender_id,ad_id,ad_title,post_id,referral_source,referral_at,has_phone,has_zalo&is_ad_referral=eq.true&referral_at=gte.${encodeURIComponent(since)}&order=referral_at.desc&limit=10000`),
-                safeSupabaseRest('v8_drive_assets?select=product_key,catalog_key,parent_folder_id,parent_folder_name,parent_folder_url,is_image,is_active,delivery_status&is_active=eq.true&is_image=eq.true&limit=10000'),
+                safeSupabaseRest('v8_drive_assets?select=product_key,catalog_key,parent_folder_id,parent_folder_name,parent_folder_url,is_image,is_active,delivery_status,metadata&is_active=eq.true&is_image=eq.true&limit=10000'),
                 safeSupabaseRest("v8_admin_change_log?select=*&or=(asset_type.ilike.*mapping*,action.ilike.*mapping*)&order=created_at.desc&limit=50"),
                 safeSupabaseRest('v8_meta_ad_account_registry?select=ad_account_id,ad_account_name,business_id,account_status,is_active,source,last_verified_at&is_active=eq.true&order=ad_account_name.asc'),
                 safeSupabaseRest('v8_meta_ad_accounts?select=ad_account_id,ad_account_name,business_id,account_status,is_active,source,last_verified_at&is_active=eq.true&order=ad_account_name.asc')
@@ -667,7 +772,15 @@ export function installMappingCenter(app, options = {}) {
             const input = req.body || {};
             const productKey = String(input.product_key || '').trim();
             if (!productKey) return res.status(400).json({ ok: false, error: 'Thiếu mã catalog/sản phẩm.' });
-            const folderIds = Array.isArray(input.drive_folder_ids) ? input.drive_folder_ids.filter(Boolean) : [];
+            const folderIds = Array.isArray(input.drive_folder_ids) ? input.drive_folder_ids.filter(value => folderToken(value)) : [];
+            const primaryFolderId = folderToken(input.drive_folder_id || folderIds[0]);
+            if (!folderIds.length || !primaryFolderId) {
+                return res.status(400).json({ ok: false, error: 'Hãy chọn ít nhất một thư mục Drive.' });
+            }
+            const existingRows = input.id
+                ? await supabaseRest(`v8_slide_mapping?select=sync_status,sync_requested_at&id=eq.${encodeURIComponent(String(input.id))}&limit=1`)
+                : [];
+            const existing = Array.isArray(existingRows) ? existingRows[0] : null;
             const row = {
                 page_id: input.page_id ? String(input.page_id).trim() : null,
                 product_key: productKey,
@@ -678,11 +791,11 @@ export function installMappingCenter(app, options = {}) {
                 is_active: input.is_active !== false,
                 note: String(input.note || '').trim(),
                 drive_folder_url: String(input.drive_folder_url || '').trim(),
-                drive_folder_id: String(input.drive_folder_id || folderIds[0] || '').trim() || null,
+                drive_folder_id: primaryFolderId,
                 drive_folder_ids: folderIds,
                 sync_mode: String(input.sync_mode || 'drive').trim(),
-                sync_status: input.request_sync ? 'requested' : String(input.sync_status || 'idle').trim(),
-                sync_requested_at: input.request_sync ? new Date().toISOString() : (input.sync_requested_at || null),
+                sync_status: input.request_sync ? 'requested' : String(input.sync_status || existing?.sync_status || 'idle').trim(),
+                sync_requested_at: input.request_sync ? new Date().toISOString() : (input.sync_requested_at || existing?.sync_requested_at || null),
                 updated_at: new Date().toISOString()
             };
             let saved;
