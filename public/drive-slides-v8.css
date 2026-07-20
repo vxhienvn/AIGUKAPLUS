@@ -11,3 +11,5 @@
 .panel-description{color:var(--muted);font-size:12px;margin-top:4px}.table-summary{color:var(--muted);font-size:12px;margin:-3px 0 10px}.column-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.header-sort{padding:3px 7px;background:#fff;border-color:#b9c8dc;color:var(--blue);font-size:11px;font-weight:650;white-space:nowrap}.header-sort.active{background:var(--blue2);border-color:#8eb3ed}
 
 .current-ad-name{margin:5px 0 2px;padding-left:16px;color:var(--text);font-size:12px}.current-ad-name span{color:var(--muted)}.current-ad-name b{color:#1d4ed8}
+
+.catalog-table{min-width:1260px}.catalog-name{display:flex;align-items:center;gap:7px;min-width:240px}.catalog-branch{color:#8aa0bd;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.catalog-key{color:var(--muted);margin-top:3px}.catalog-actions{min-width:230px}.catalog-actions button{white-space:nowrap}.catalog-inactive{opacity:.68;background:#fafafa}.catalog-inactive:hover{opacity:1}.locked-input{background:#f1f5f9!important;color:#475569}.catalog-modal-card{width:min(820px,100%)}

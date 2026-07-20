@@ -684,7 +684,7 @@ export function installMappingCenter(app, options = {}) {
                 safeSupabaseRest('v8_pages?select=page_id,page_name,is_active&order=page_name.asc'),
                 safeSupabaseRest('v8_mapping_runtime?select=*&order=page_id.asc'),
                 safeSupabaseRest('v8_business_product_groups?select=group_key,group_name,priority,is_active&is_active=eq.true&order=priority.asc'),
-                safeSupabaseRest('v8_product_catalog?select=catalog_key,catalog_name,parent_key,root_product_key,drive_folder_id,drive_folder_url,folder_path,level_no,is_sendable,is_active&is_active=eq.true&order=level_no.asc,catalog_name.asc'),
+                safeSupabaseRest('v8_product_catalog?select=catalog_key,catalog_name,parent_key,root_product_key,drive_folder_id,drive_folder_url,folder_path,level_no,is_sendable,is_active,metadata,created_at,updated_at&order=level_no.asc,catalog_name.asc'),
                 safeSupabaseRest('ad_mappings?select=*&order=updated_at.desc&limit=2000'),
                 safeSupabaseRest('v8_slide_mapping?select=*&order=priority.asc,product_name.asc&limit=1000'),
                 safeSupabaseRest(`v8_meta_ad_referral_entries?select=page_id,page_name,sender_id,ad_id,ad_title,post_id,referral_source,referral_at,has_phone,has_zalo&is_ad_referral=eq.true&referral_at=gte.${encodeURIComponent(since)}&order=referral_at.desc&limit=10000`),
@@ -694,8 +694,9 @@ export function installMappingCenter(app, options = {}) {
                 safeSupabaseRest('v8_meta_ad_accounts?select=ad_account_id,ad_account_name,business_id,account_status,is_active,source,last_verified_at&is_active=eq.true&order=ad_account_name.asc')
             ]);
             const [pages, runtime, groups, catalogs, mappings, slideMappings, referrals, assets, changeLog, accountRegistry, metaAccounts] = queries;
-            const assetSummary = mergeConfiguredFolders(aggregateAssets(assets.data), catalogs.data, slideMappings.data);
-            const normalizedMappings = normalizeStoredMappings(mappings.data, assetSummary.folders, catalogs.data);
+            const activeCatalogs = (Array.isArray(catalogs.data) ? catalogs.data : []).filter(row => row.is_active !== false);
+            const assetSummary = mergeConfiguredFolders(aggregateAssets(assets.data), activeCatalogs, slideMappings.data);
+            const normalizedMappings = normalizeStoredMappings(mappings.data, assetSummary.folders, activeCatalogs);
             const currentAds = aggregateCurrentAds(referrals.data, normalizedMappings);
             const mappingAccounts = normalizedMappings.map(row => ({
                 ad_account_id: row.ad_account_id,
@@ -720,7 +721,8 @@ export function installMappingCenter(app, options = {}) {
                 pages: pages.data,
                 runtime: runtime.data,
                 groups: groups.data,
-                catalogs: catalogs.data,
+                catalogs: activeCatalogs,
+                all_catalogs: catalogs.data,
                 mappings: normalizedMappings,
                 slide_mappings: slideMappings.data,
                 current_ads: currentAds,
@@ -749,6 +751,256 @@ export function installMappingCenter(app, options = {}) {
             res.json({ ok: true, ...snapshot, synced_at: new Date(metaAdsCache.loadedAt).toISOString(), source: 'meta_graph' });
         } catch (error) {
             res.status(error.status || 502).json({ ok: false, error: error.message });
+        }
+    });
+
+    function catalogMetadata(value) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) return { ...value };
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+            } catch (_) { /* Ignore malformed legacy metadata. */ }
+        }
+        return {};
+    }
+
+    function catalogAdminOrder(row) {
+        const metadata = catalogMetadata(row?.metadata);
+        const value = Number(metadata.admin_order ?? metadata.sort_order);
+        return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+    }
+
+    function sortCatalogSiblings(rows = []) {
+        return [...rows].sort((a, b) =>
+            catalogAdminOrder(a) - catalogAdminOrder(b) ||
+            String(a.catalog_name || a.catalog_key).localeCompare(String(b.catalog_name || b.catalog_key), 'vi', { numeric: true, sensitivity: 'base' })
+        );
+    }
+
+    async function loadCatalogAdminRows() {
+        const rows = await supabaseRest('v8_product_catalog?select=catalog_key,catalog_name,parent_key,root_product_key,drive_folder_id,drive_folder_url,folder_path,level_no,is_sendable,is_active,metadata,created_at,updated_at&order=level_no.asc,catalog_name.asc&limit=5000');
+        return Array.isArray(rows) ? rows : [];
+    }
+
+    function computeCatalogHierarchy(rows = []) {
+        const byKey = new Map(rows.map(row => [String(row.catalog_key || ''), row]));
+        const memo = new Map();
+        const visiting = new Set();
+        const compute = key => {
+            if (memo.has(key)) return memo.get(key);
+            const row = byKey.get(key);
+            if (!row) {
+                const error = new Error(`Không tìm thấy catalog ${key}.`);
+                error.status = 400;
+                throw error;
+            }
+            if (visiting.has(key)) {
+                const error = new Error('Cấu trúc catalog tạo thành vòng lặp cha — con.');
+                error.status = 400;
+                throw error;
+            }
+            visiting.add(key);
+            const parentKey = String(row.parent_key || '').trim();
+            let levelNo = 1;
+            let rootProductKey = key;
+            if (parentKey) {
+                const parent = byKey.get(parentKey);
+                if (!parent) {
+                    const error = new Error(`Catalog cha ${parentKey} không tồn tại.`);
+                    error.status = 400;
+                    throw error;
+                }
+                const parentHierarchy = compute(parentKey);
+                levelNo = parentHierarchy.level_no + 1;
+                rootProductKey = row.is_sendable !== false && parent.is_sendable === false
+                    ? key
+                    : (parentHierarchy.root_product_key || parentKey);
+            }
+            visiting.delete(key);
+            const result = { level_no: levelNo, root_product_key: rootProductKey };
+            memo.set(key, result);
+            return result;
+        };
+        for (const key of byKey.keys()) compute(key);
+        return memo;
+    }
+
+    async function catalogDisableBlockers(rows, catalogKey) {
+        const activeChildren = rows.filter(row => String(row.parent_key || '') === catalogKey && row.is_active !== false);
+        const [adMappings, slideMappings] = await Promise.all([
+            supabaseRest(`ad_mappings?select=id,ad_id,ad_name,product_item_key,is_active,enabled&product_item_key=eq.${encodeURIComponent(catalogKey)}&limit=50`),
+            supabaseRest(`v8_slide_mapping?select=id,product_key,product_name,is_active&product_key=eq.${encodeURIComponent(catalogKey)}&limit=50`)
+        ]);
+        return {
+            children: activeChildren.map(row => ({ catalog_key: row.catalog_key, catalog_name: row.catalog_name })),
+            ad_mappings: (Array.isArray(adMappings) ? adMappings : []).filter(row =>
+                String(row.product_item_key || '') === catalogKey && row.is_active !== false && row.enabled !== false
+            ),
+            slide_mappings: (Array.isArray(slideMappings) ? slideMappings : []).filter(row =>
+                String(row.product_key || '') === catalogKey && row.is_active !== false
+            )
+        };
+    }
+
+    function hasCatalogBlockers(blockers) {
+        return blockers.children.length || blockers.ad_mappings.length || blockers.slide_mappings.length;
+    }
+
+    async function logCatalogChange(action, catalogKey, beforeData, afterData) {
+        await safeSupabaseRest('v8_admin_change_log', [], {
+            method: 'POST',
+            headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({
+                actor: 'railway_mapping_center',
+                action,
+                asset_type: 'catalog_mapping',
+                asset_id: catalogKey,
+                before_data: beforeData || null,
+                after_data: afterData || null
+            })
+        });
+    }
+
+    app.post('/api/v8-mapping-center/catalog', jsonBody, requireMappingWrite, async (req, res) => {
+        try {
+            const input = req.body || {};
+            const catalogKey = String(input.catalog_key || '').trim().toLowerCase();
+            const catalogName = String(input.catalog_name || '').trim();
+            const parentKey = String(input.parent_key || '').trim() || null;
+            const isNew = input.is_new === true;
+            if (!/^[a-z0-9][a-z0-9_]{0,79}$/.test(catalogKey)) {
+                return res.status(400).json({ ok: false, error: 'Mã catalog chỉ gồm chữ thường không dấu, số và dấu gạch dưới.' });
+            }
+            if (!catalogName || catalogName.length > 160) {
+                return res.status(400).json({ ok: false, error: 'Tên catalog phải có từ 1 đến 160 ký tự.' });
+            }
+
+            const rows = await loadCatalogAdminRows();
+            const existing = rows.find(row => String(row.catalog_key) === catalogKey) || null;
+            if (isNew && existing) return res.status(409).json({ ok: false, error: `Mã catalog ${catalogKey} đã tồn tại.` });
+            if (!isNew && !existing) return res.status(404).json({ ok: false, error: `Không tìm thấy catalog ${catalogKey}.` });
+            if (parentKey === catalogKey) return res.status(400).json({ ok: false, error: 'Catalog không thể là cha của chính nó.' });
+
+            const parent = parentKey ? rows.find(row => String(row.catalog_key) === parentKey) : null;
+            if (parentKey && !parent) return res.status(400).json({ ok: false, error: 'Catalog cha không tồn tại.' });
+            const desiredActive = input.is_active !== false;
+            if (desiredActive && parent?.is_active === false) {
+                return res.status(409).json({ ok: false, error: 'Hãy bật catalog cha trước khi bật hoặc chuyển catalog con vào đó.' });
+            }
+            if (existing && parentKey && catalogDescendants(rows, catalogKey).has(parentKey)) {
+                return res.status(400).json({ ok: false, error: 'Không thể chuyển catalog vào bên trong một catalog con của chính nó.' });
+            }
+            if (existing?.is_active !== false && !desiredActive) {
+                const blockers = await catalogDisableBlockers(rows, catalogKey);
+                if (hasCatalogBlockers(blockers)) {
+                    return res.status(409).json({
+                        ok: false,
+                        error: 'Catalog vẫn còn catalog con hoặc Mapping đang sử dụng. Hãy chuyển/tắt các mục liên quan trước.',
+                        blockers
+                    });
+                }
+            }
+
+            const parentChanged = Boolean(existing) && String(existing.parent_key || '') !== String(parentKey || '');
+            const siblingRows = rows.filter(row => String(row.parent_key || '') === String(parentKey || '') && String(row.catalog_key) !== catalogKey);
+            const nextOrder = sortCatalogSiblings(siblingRows).reduce((max, row, index) => {
+                const value = catalogAdminOrder(row);
+                return Math.max(max, Number.isFinite(value) && value < Number.MAX_SAFE_INTEGER ? value : (index + 1) * 10);
+            }, 0) + 10;
+            const metadata = catalogMetadata(existing?.metadata);
+            if (isNew || parentChanged || !Number.isFinite(Number(metadata.admin_order))) metadata.admin_order = nextOrder;
+            const proposed = {
+                ...(existing || {}),
+                catalog_key: catalogKey,
+                catalog_name: catalogName,
+                parent_key: parentKey,
+                is_sendable: input.is_sendable !== false,
+                is_active: desiredActive,
+                metadata
+            };
+            const proposedRows = existing
+                ? rows.map(row => String(row.catalog_key) === catalogKey ? proposed : row)
+                : [...rows, proposed];
+            const hierarchy = computeCatalogHierarchy(proposedRows);
+            const now = new Date().toISOString();
+            let saved;
+            if (!existing) {
+                const computed = hierarchy.get(catalogKey);
+                const row = {
+                    catalog_key: catalogKey,
+                    catalog_name: catalogName,
+                    parent_key: parentKey,
+                    root_product_key: computed.root_product_key,
+                    drive_folder_id: null,
+                    drive_folder_url: null,
+                    folder_path: null,
+                    level_no: computed.level_no,
+                    is_sendable: proposed.is_sendable,
+                    is_active: desiredActive,
+                    metadata,
+                    updated_at: now
+                };
+                const response = await supabaseRest('v8_product_catalog', {
+                    method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row)
+                });
+                saved = Array.isArray(response) ? response[0] : response;
+            } else {
+                const affectedKeys = catalogDescendants(proposedRows, catalogKey);
+                for (const row of proposedRows.filter(item => affectedKeys.has(String(item.catalog_key)))) {
+                    const computed = hierarchy.get(String(row.catalog_key));
+                    const update = String(row.catalog_key) === catalogKey
+                        ? {
+                            catalog_name: catalogName,
+                            parent_key: parentKey,
+                            root_product_key: computed.root_product_key,
+                            level_no: computed.level_no,
+                            is_sendable: proposed.is_sendable,
+                            is_active: desiredActive,
+                            metadata,
+                            updated_at: now
+                        }
+                        : { root_product_key: computed.root_product_key, level_no: computed.level_no, updated_at: now };
+                    const response = await supabaseRest(`v8_product_catalog?catalog_key=eq.${encodeURIComponent(String(row.catalog_key))}`, {
+                        method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(update)
+                    });
+                    if (String(row.catalog_key) === catalogKey) saved = Array.isArray(response) ? response[0] : response;
+                }
+            }
+            await logCatalogChange(existing ? 'update_catalog_mapping' : 'create_catalog_mapping', catalogKey, existing, saved || proposed);
+            res.json({ ok: true, saved: saved || proposed });
+        } catch (error) {
+            res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
+        }
+    });
+
+    app.post('/api/v8-mapping-center/catalog/reorder', jsonBody, requireMappingWrite, async (req, res) => {
+        try {
+            const catalogKey = String(req.body?.catalog_key || '').trim();
+            const direction = String(req.body?.direction || '').trim().toLowerCase();
+            if (!catalogKey || !['up', 'down'].includes(direction)) {
+                return res.status(400).json({ ok: false, error: 'Thiếu catalog hoặc hướng sắp xếp không hợp lệ.' });
+            }
+            const rows = await loadCatalogAdminRows();
+            const current = rows.find(row => String(row.catalog_key) === catalogKey);
+            if (!current) return res.status(404).json({ ok: false, error: 'Không tìm thấy catalog.' });
+            const siblings = sortCatalogSiblings(rows.filter(row => String(row.parent_key || '') === String(current.parent_key || '')));
+            const index = siblings.findIndex(row => String(row.catalog_key) === catalogKey);
+            const targetIndex = direction === 'up' ? index - 1 : index + 1;
+            if (targetIndex < 0 || targetIndex >= siblings.length) return res.json({ ok: true, unchanged: true });
+            [siblings[index], siblings[targetIndex]] = [siblings[targetIndex], siblings[index]];
+            const now = new Date().toISOString();
+            for (let orderIndex = 0; orderIndex < siblings.length; orderIndex += 1) {
+                const row = siblings[orderIndex];
+                const metadata = { ...catalogMetadata(row.metadata), admin_order: (orderIndex + 1) * 10 };
+                await supabaseRest(`v8_product_catalog?catalog_key=eq.${encodeURIComponent(String(row.catalog_key))}`, {
+                    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ metadata, updated_at: now })
+                });
+            }
+            await logCatalogChange('reorder_catalog_mapping', catalogKey, current, { direction, parent_key: current.parent_key });
+            res.json({ ok: true, ordered_keys: siblings.map(row => row.catalog_key) });
+        } catch (error) {
+            res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
         }
     });
 
