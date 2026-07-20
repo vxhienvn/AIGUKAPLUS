@@ -94,8 +94,15 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   const html = await nativeFetch(`${base}/drive-slides`).then(response => response.text());
   assert.match(html, /id="currentBusiness"/);
   assert.match(html, /id="currentAccount"/);
+  assert.match(html, /id="currentMetaState"/);
+  assert.match(html, /<option value="active">Meta: Đang hoạt động<\/option>/);
+  assert.match(html, /id="currentTableSummary"/);
   assert.match(html, /class="folder-picker-inline"/);
-  assert.ok((html.match(/Chiến dịch \/ Nhóm quảng cáo/g) || []).length >= 2);
+  assert.match(html, /Chiến dịch \/ Nhóm quảng cáo/);
+  assert.match(html, /Tên QC \/ Quảng cáo/);
+  assert.match(html, /onclick="toggleStatusSort\('current'\)"/);
+  assert.match(html, /onclick="toggleStatusSort\('mapping'\)"/);
+  assert.match(html, /Tất cả Mapping QC/);
   assert.doesNotMatch(html, /<th>QC<\/th>|Tài khoản QC \/ Quảng cáo/);
   assert.match(html, /Chưa chọn thư mục Drive/);
   assert.match(html, /id="syncAllProducts"/);
@@ -106,6 +113,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   const coreSource = await nativeFetch(`${base}/admin/drive-slides-v8-core.js`).then(response => response.text());
   assert.match(coreSource, /id === 'products'/);
   assert.match(coreSource, /maybeAutoSyncAllSlideMappings/);
+  assert.match(coreSource, /meta_seen: false/);
+  assert.match(coreSource, /meta_seen: true/);
+  assert.match(coreSource, /function isActiveMetaAd/);
+  assert.match(coreSource, /state\.currentAds\.filter\(isActiveMetaAd\)/);
 
   const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
   const cssSource = await nativeFetch(`${base}/admin/drive-slides-v8.css`).then(response => response.text());
@@ -115,11 +126,17 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(currentRenderer, /campaign_name/);
   assert.match(currentRenderer, /adset_name/);
   assert.match(currentRenderer, /statusDotHtml/);
+  assert.match(currentRenderer, /metaEffectiveStatus\(row\)/);
+  assert.match(currentRenderer, /currentTableSummary/);
   assert.match(currentRenderer, /colspan="5"/);
   assert.doesNotMatch(currentRenderer, /colspan="6"/);
   assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"|ad_account_name|business_name|ad_title|row\.ad_name/);
   assert.match(mappingRenderer, /campaign_name/);
   assert.match(mappingRenderer, /adset_name/);
+  assert.match(mappingRenderer, /mapping\.ad_name/);
+  assert.match(mappingRenderer, /Chiến dịch:/);
+  assert.match(mappingRenderer, /Nhóm:/);
+  assert.match(mappingRenderer, /hasRecentReferral/);
   assert.match(mappingRenderer, /statusDotHtml/);
   assert.doesNotMatch(mappingRenderer, /class="id"|mapping\.ad_account_name/);
   assert.match(productRenderer, /statusDotHtml/);
@@ -129,6 +146,7 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(renderSource, /Mở rộng/);
   assert.match(cssSource, /status-dot/);
   assert.match(cssSource, /folder-disclosure/);
+  assert.match(cssSource, /header-sort/);
   assert.match(renderSource, /Thiếu nguồn ảnh/);
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
