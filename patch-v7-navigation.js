@@ -5,8 +5,10 @@ source = source.replaceAll("⚙ Quản lý Page/TEST", "⚙ Điều khiển BOT 
 source = source.replaceAll("AI Học có kiểm duyệt", "AI Học & Quản lý Prompt");
 const learningNav = "${nav('/v8-learning','AI Học & Quản lý Prompt','learning')}";
 const providersNav = "${nav('/ai-providers','🧠 Tích hợp OpenAI & Gemini','ai-providers')}";
-const slidesNav = "${nav('/drive-slides','🖼 Mapping & Test Slide','drive-slides')}";
+const legacySlidesNav = "${nav('/drive-slides','🖼 Mapping & Test Slide','drive-slides')}";
+const mappingNav = "${nav('/drive-slides','🖼 Mapping','drive-slides')}";
+source = source.replaceAll(legacySlidesNav, mappingNav);
 if (!source.includes(providersNav)) source = source.replace(learningNav, learningNav + providersNav);
-if (!source.includes(slidesNav)) source = source.replace(providersNav, providersNav + slidesNav);
+if (!source.includes(mappingNav)) source = source.replace(providersNav, providersNav + mappingNav);
 fs.writeFileSync(file, source, "utf8");
-console.log("[AIGUKA] Dashboard menu includes AI integration and Mapping/Test Slide");
+console.log("[AIGUKA] Dashboard menu links directly to Mapping Center");

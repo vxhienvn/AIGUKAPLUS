@@ -1,8 +1,13 @@
 export function patchDashboardUi(html){
+  const mappingLink='<a class="nav" data-aiguka-direct-mapping="1" href="/drive-slides">🖼 Mapping</a>';
+  let output=html;
+  if(!/href=["']\/drive-slides(?:[?"'])/i.test(output)){
+    output=/<\/aside>/i.test(output)?output.replace(/<\/aside>/i,mappingLink+'</aside>'):mappingLink+output;
+  }
   const extra=`<style>.aiguka_lead_tag{display:inline-block;margin:2px;padding:3px 7px;border-radius:999px;background:#ede9fe;color:#5b21b6;font-size:12px;font-weight:700}</style><script>(function(){
 function tagNames(v){return (Array.isArray(v)?v:[]).map(x=>x&&typeof x==='object'?(x.text||x.name||''):String(x||'')).filter(Boolean)}
 function install(){if(typeof window.renderLeads!=='function'||window.renderLeads.__tags)return;const original=window.renderLeads;function enhanced(rows,count){original(rows,count);const body=document.getElementById('leadRows');if(!body)return;const table=body.closest('table'),head=table?.querySelector('thead tr');if(head&&!head.querySelector('[data-aiguka-tags]')){const th=document.createElement('th');th.dataset.aigukaTags='1';th.textContent='Tag Pancake';head.insertBefore(th,head.children[8]||null)}const trs=[...body.querySelectorAll('tr')];(rows||[]).forEach((row,i)=>{const tr=trs[i];if(!tr||tr.children.length<8)return;const td=document.createElement('td');td.dataset.aigukaTags='1';const tags=tagNames(row.pancake_tags);td.innerHTML=tags.length?tags.map(t=>'<span class="aiguka_lead_tag">'+t+'</span>').join(''):'-';tr.insertBefore(td,tr.children[8]||null)});const empty=body.querySelector('tr .empty');if(empty)empty.colSpan=Number(empty.colSpan||11)+1}enhanced.__tags=true;window.renderLeads=enhanced;if(typeof window.loadLeads==='function')window.loadLeads().catch(()=>{})}
 let n=0;const timer=setInterval(()=>{install();if(++n>30)clearInterval(timer)},300);install();
 })();</script>`;
-  return /<\/body>/i.test(html)?html.replace(/<\/body>/i,extra+'</body>'):html+extra;
+  return /<\/body>/i.test(output)?output.replace(/<\/body>/i,extra+'</body>'):output+extra;
 }
