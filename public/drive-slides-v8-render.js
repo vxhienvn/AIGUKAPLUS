@@ -22,6 +22,9 @@ function mappingScope(mapping) {
 function mappingLabel(mapping) {
   if (!mapping) return '<span class="badge bad">Chưa Mapping</span>';
   const scope = mappingScope(mapping);
+  if (!mappingHasUsableScope(mapping)) {
+    return `<span class="badge warn">Thiếu nguồn ảnh</span><div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small warn-text">Cần chọn nhóm sản phẩm, catalog hoặc thư mục Drive</div>`;
+  }
   return `<span class="badge ok">Đã Mapping</span><div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small muted">${esc(scope.detail)}</div>`;
 }
 
@@ -44,7 +47,13 @@ function currentRows() {
 
 function folderListHtml(mapping) {
   const ids = mappingFolderIds(mapping);
-  if (!ids.length) return '<span class="muted">Chưa gán</span>';
+  if (!ids.length && !mappingHasUsableScope(mapping)) {
+    return '<span class="badge warn">Chưa chọn thư mục Drive</span><div class="small warn-text">QC cũ đã có bản ghi nhưng Bot chưa có nguồn ảnh riêng.</div>';
+  }
+  if (!ids.length) {
+    const scope = mappingScope(mapping);
+    return `<span class="badge info">Theo phạm vi sản phẩm</span><div class="small muted">${esc(scope.title)}</div>`;
+  }
   const warning = mapping?.folder_sync_status === 'partial' ? '<div class="badge warn">Có đường dẫn cũ chưa đối chiếu được</div>' : '';
   return ids.map(id => `<div class="small">📁 ${esc(folderName(id))}</div>`).join('') + warning;
 }
@@ -108,6 +117,34 @@ function imageCountFor(key) {
   return (state.data?.asset_summary?.by_catalog || []).reduce((sum, row) => sum + (keys.has(String(row.catalog_key || '')) ? Number(row.images || 0) : 0), 0);
 }
 
+function folderImageSummary(ids = []) {
+  const selected = new Set(ids.map(String));
+  const folders = ids.map(id => state.folders.find(row => String(row.folder_id) === String(id))).filter(Boolean);
+  const included = folders.filter(folder => {
+    let parentId = String(folder.parent_folder_id || '');
+    const visited = new Set();
+    while (parentId && !visited.has(parentId)) {
+      if (selected.has(parentId)) return false;
+      visited.add(parentId);
+      parentId = String(state.folders.find(row => String(row.folder_id) === parentId)?.parent_folder_id || '');
+    }
+    return true;
+  });
+  return {
+    available: included.some(folder => folder.live_drive),
+    images: included.reduce((sum, folder) => sum + Number(folder.images ?? folder.total_images ?? folder.direct_images ?? 0), 0)
+  };
+}
+
+function syncStatusHtml(mapping, syncedCount) {
+  if (mapping._catalog_only) return '<span class="badge info">Theo catalog</span>';
+  const statusValue = String(mapping.sync_status || 'idle').toLowerCase();
+  if (statusValue === 'success') return `<span class="badge ok">Đã đồng bộ</span><div class="small muted">${fmtDate(mapping.last_synced_at)}</div>`;
+  if (statusValue === 'error') return `<span class="badge bad">Đồng bộ lỗi</span><div class="small warn-text">${esc(mapping.sync_error || 'Bấm Đồng bộ ngay để thử lại')}</div>`;
+  if (statusValue === 'requested') return '<span class="badge warn">Đang chờ đồng bộ</span>';
+  return `<span class="badge warn">Chưa đồng bộ</span><div class="small muted">${syncedCount} ảnh Bot đang dùng</div>`;
+}
+
 function folderIdsFor(mapping) {
   const values = Array.isArray(mapping?.drive_folder_ids) ? mapping.drive_folder_ids : [];
   const ids = values.map(value => String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || ''))).filter(Boolean);
@@ -136,9 +173,15 @@ function renderProducts() {
   for (const mapping of rows) {
     const catalog = state.catalogs.find(row => row.catalog_key === mapping.product_key);
     const ids = folderIdsFor(mapping);
-    const count = imageCountFor(mapping.product_key);
+    const syncedCount = imageCountFor(mapping.product_key);
+    const live = folderImageSummary(ids);
+    const shownCount = live.available ? live.images : syncedCount;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${ids.length ? ids.map(id => { const folder = state.folders.find(row => String(row.folder_id) === String(id)); return `<div>📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${folder?.images || 0} ảnh trực tiếp)</span></div>`; }).join('') : '<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${count}</b>${count ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}</td><td>${mapping._catalog_only ? '<span class="badge info">Theo catalog</span>' : esc(mapping.sync_status || '-')}<div class="small muted">${fmtDate(mapping.last_synced_at)}</div></td><td><button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>${mapping._catalog_only ? 'Tạo Mapping' : 'Sửa'}</button></td>`;
+    const countDetail = live.available ? `<div class="small muted">Drive: ${live.images} · Bot đã đồng bộ: ${syncedCount}</div>` : `<div class="small muted">${syncedCount} ảnh Bot đã đồng bộ</div>`;
+    const action = mapping._catalog_only
+      ? `<button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Tạo Mapping</button>`
+      : `<div class="row-actions"><button onclick='openSlideMapping(${JSON.stringify(mapping).replace(/'/g, "&#39;")})'>Sửa</button><button class="primary" onclick='syncSlideMapping(${JSON.stringify(String(mapping.id))})'>Đồng bộ ngay</button></div>`;
+    tr.innerHTML = `<td><b>${esc(mapping.product_name || catalog?.catalog_name || mapping.product_key)}</b><div class="id">${esc(mapping.product_key)}</div><div class="small muted">${esc(mapping.folder_path || catalog?.folder_path || '')}</div></td><td>${esc(mapping.page_id || 'Tất cả Page')}</td><td>${ids.length ? ids.map(id => { const folder = state.folders.find(row => String(row.folder_id) === String(id)); const total = Number(folder?.images ?? folder?.total_images ?? folder?.direct_images ?? 0); const direct = Number(folder?.direct_images ?? total); return `<div>📁 ${esc(folder?.folder_name || id)} <span class="small muted">(${total} ảnh tổng · ${direct} trực tiếp)</span></div>`; }).join('') : '<span class="badge bad">Chưa gán thư mục</span>'}</td><td><b>${shownCount}</b>${shownCount ? '<span class="badge ok" style="margin-left:6px">Có ảnh</span>' : '<span class="badge bad" style="margin-left:6px">Thiếu ảnh</span>'}${countDetail}</td><td>${syncStatusHtml(mapping, syncedCount)}</td><td>${action}</td>`;
     body.appendChild(tr);
   }
 }
@@ -190,6 +233,7 @@ function openMapping(row) {
   $('m_ad_account_name').value = mapping.ad_account_name || row.ad_account_name || '';
   setFolderSelection('m_folders', mapping.resolved_folder_ids || mapping.selected_folders || mapping.drive_folders || []);
   openModal('mappingModal');
+  loadDriveTree(false).catch(error => status(`Đang dùng danh sách đã đồng bộ vì chưa tải được cây Drive: ${error.message}`, true));
 }
 
 function suggestFoldersFromCatalog() {
@@ -259,12 +303,13 @@ function openSlideMapping(mapping) {
   $('sm_page').value = mapping.page_id || '';
   $('sm_priority').value = mapping.priority || 100;
   $('sm_active').checked = mapping.is_active !== false;
-  $('sm_sync').checked = false;
+  $('sm_sync').checked = !mapping.id || !mapping.last_synced_at || ['idle', 'requested', 'error'].includes(String(mapping.sync_status || 'idle').toLowerCase());
   $('sm_note').value = mapping.note || '';
   const ids = [...(mapping.drive_folder_ids || [])];
   if (!ids.length && mapping.drive_folder_id) ids.push(mapping.drive_folder_id);
   setFolderSelection('sm_folders', ids);
   openModal('slideModal');
+  loadDriveTree(false).catch(error => status(`Đang dùng danh sách đã đồng bộ vì chưa tải được cây Drive: ${error.message}`, true));
 }
 
 function fillSlideProductName() {
@@ -278,29 +323,62 @@ async function saveSlideMapping(event) {
   try {
     const ids = selectedFolderIds('sm_folders');
     if (!ids.length) throw new Error('Hãy chọn ít nhất một thư mục Drive.');
+    const folderValues = selectedFolderValues('sm_folders');
     const catalog = state.catalogs.find(row => row.catalog_key === $('sm_product').value);
     const first = state.folders.find(row => row.folder_id === ids[0]);
-    await api('/api/v8-mapping-center/slide-mapping', {
+    const requestSync = $('sm_sync').checked;
+    const response = await api('/api/v8-mapping-center/slide-mapping', {
       method: 'POST',
       body: JSON.stringify({
         id: $('sm_id').value || null,
         product_key: $('sm_product').value,
         product_name: $('sm_name').value || catalog?.catalog_name,
         page_id: $('sm_page').value || null,
-        drive_folder_ids: ids,
+        drive_folder_ids: folderValues,
         drive_folder_id: ids[0] || null,
         drive_folder_url: first?.folder_url || '',
         priority: Number($('sm_priority').value || 100),
         is_active: $('sm_active').checked,
-        request_sync: $('sm_sync').checked,
+        request_sync: requestSync,
         note: $('sm_note').value
       })
     });
+    let syncResult = null;
+    let syncError = null;
+    if (requestSync && response.saved?.id) {
+      try {
+        syncResult = await api('/api/slide-manager/drive/sync', {
+          method: 'POST',
+          body: JSON.stringify({ mapping_id: response.saved.id })
+        });
+      } catch (error) {
+        syncError = error;
+      }
+    }
     closeModal('slideModal');
     await loadAll(false);
-    status(`Đã lưu Mapping sản phẩm với ${ids.length} thư mục Drive.`);
+    if (syncError) status(`Đã lưu Mapping nhưng đồng bộ Drive lỗi: ${syncError.message}`, true);
+    else if (syncResult) status(`Đã lưu và quét ${syncResult.folders_scanned || 0} thư mục, đồng bộ ${syncResult.synced || 0} ảnh cho Bot.`);
+    else status(`Đã lưu Mapping sản phẩm với ${ids.length} thư mục Drive.`);
   } catch (error) {
     status(error.message, true);
+  } finally {
+    busy(false);
+  }
+}
+
+async function syncSlideMapping(mappingId) {
+  busy(true);
+  try {
+    const result = await api('/api/slide-manager/drive/sync', {
+      method: 'POST',
+      body: JSON.stringify({ mapping_id: mappingId })
+    });
+    await loadAll(false);
+    status(`Đã quét ${result.folders_scanned || 0} thư mục và đồng bộ ${result.synced || 0} ảnh cho Bot.`);
+  } catch (error) {
+    await loadAll(false).catch(() => {});
+    status(`Đồng bộ Drive lỗi: ${error.message}`, true);
   } finally {
     busy(false);
   }

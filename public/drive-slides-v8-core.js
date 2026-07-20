@@ -10,6 +10,9 @@ const state = {
   slideMappings: [],
   adAccounts: [],
   businesses: [],
+  driveTree: [],
+  driveTreeLoaded: false,
+  driveTreePromise: null,
   folderSelections: { m_folders: new Set(), sm_folders: new Set() }
 };
 
@@ -99,6 +102,16 @@ function mergeBusinesses(rows = []) {
   state.businesses = [...businesses.values()].sort((a, b) => String(a.business_name).localeCompare(String(b.business_name), 'vi'));
 }
 
+function mappingHasUsableScope(mapping) {
+  if (!mapping || mapping.is_active === false || mapping.enabled === false) return false;
+  const productItem = String(mapping.product_item_key || '').trim();
+  const productGroup = String(mapping.product_group || '').trim();
+  const folders = Array.isArray(mapping.resolved_folder_ids) && mapping.resolved_folder_ids.length
+    ? mapping.resolved_folder_ids
+    : (Array.isArray(mapping.selected_folders) && mapping.selected_folders.length ? mapping.selected_folders : (mapping.drive_folders || []));
+  return Boolean(productItem || (productGroup && productGroup !== 'general') || (Array.isArray(folders) && folders.length));
+}
+
 function mergeMetaAds() {
   const ads = new Map(state.currentAds.map(row => [String(row.ad_id), row]));
   const pages = new Map((state.data?.pages || []).map(row => [String(row.page_id), row.page_name || row.page_id]));
@@ -134,7 +147,7 @@ function mergeMetaAds() {
     });
     const mapping = state.mappings.find(item => String(item.ad_id) === id);
     current.mapping = mapping || current.mapping;
-    current.mapped = Boolean(mapping && mapping.is_active !== false && mapping.enabled !== false);
+    current.mapped = mappingHasUsableScope(mapping);
     ads.set(id, current);
   }
   for (const current of ads.values()) {
@@ -176,6 +189,7 @@ async function loadAll(showMessage = true) {
     state.catalogs = data.catalogs || [];
     state.groups = data.groups || [];
     state.folders = data.asset_summary?.folders || [];
+    if (state.driveTree.length) mergeDriveTreeFolders(state.driveTree);
     state.slideMappings = data.slide_mappings || [];
     state.adAccounts = [];
     state.businesses = [];
@@ -242,10 +256,114 @@ function catalogTreeRows(rows = state.catalogs) {
 }
 
 function folderTreeRows() {
-  return [...state.folders].map(folder => {
-    const path = String(folder.folder_path || folder.folder_name || folder.folder_id || '').replace(/^\/+|\/+$/g, '');
-    return { ...folder, _path: path, _depth: Math.max(0, path.split('/').filter(Boolean).length - 1) };
-  }).sort((a, b) => a._path.localeCompare(b._path, 'vi', { numeric: true, sensitivity: 'base' }));
+  const rows = [...state.folders].map(folder => {
+    const path = String(folder.folder_path || folder.folder_name || folder.folder_id || '').replace(/^\/+|\/+$/g, '').replace(/\s*\/\s*/g, '/');
+    return { ...folder, folder_id: String(folder.folder_id || ''), parent_folder_id: String(folder.parent_folder_id || folder.parent_id || ''), _path: path };
+  }).filter(folder => folder.folder_id);
+  const byId = new Map(rows.map(folder => [folder.folder_id, folder]));
+  const byPath = new Map();
+  for (const folder of rows) {
+    const key = folder._path.toLocaleLowerCase('vi-VN');
+    const ids = byPath.get(key) || [];
+    ids.push(folder.folder_id);
+    byPath.set(key, ids);
+  }
+  for (const folder of rows) {
+    if (folder.parent_folder_id && byId.has(folder.parent_folder_id) && folder.parent_folder_id !== folder.folder_id) continue;
+    folder.parent_folder_id = '';
+    const parts = folder._path.split('/').filter(Boolean);
+    while (parts.length > 1 && !folder.parent_folder_id) {
+      parts.pop();
+      const candidates = (byPath.get(parts.join('/').toLocaleLowerCase('vi-VN')) || []).filter(id => id !== folder.folder_id);
+      if (candidates.length === 1) folder.parent_folder_id = candidates[0];
+    }
+  }
+  const children = new Map();
+  for (const folder of rows) {
+    const parent = folder.parent_folder_id && byId.has(folder.parent_folder_id) ? folder.parent_folder_id : '';
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(folder);
+  }
+  const sortFolders = list => list.sort((a, b) => String(a.folder_name || a.folder_id).localeCompare(String(b.folder_name || b.folder_id), 'vi', { numeric: true, sensitivity: 'base' }));
+  const result = [];
+  const visited = new Set();
+  const walk = (folder, depth) => {
+    if (visited.has(folder.folder_id)) return;
+    visited.add(folder.folder_id);
+    result.push({ ...folder, _depth: depth });
+    for (const child of sortFolders([...(children.get(folder.folder_id) || [])])) walk(child, depth + 1);
+  };
+  for (const root of sortFolders([...(children.get('') || [])])) walk(root, 0);
+  for (const folder of sortFolders(rows.filter(folder => !visited.has(folder.folder_id)))) walk(folder, 0);
+  return result;
+}
+
+function mergeDriveTreeFolders(rows = []) {
+  const folders = new Map(state.folders.map(folder => [String(folder.folder_id || ''), folder]));
+  const liveIds = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = String(row.id || row.folder_id || '').trim();
+    if (!id) continue;
+    liveIds.add(id);
+    const current = folders.get(id) || { folder_id: id, catalogs: [] };
+    folders.set(id, {
+      ...current,
+      folder_id: id,
+      folder_name: row.name || row.folder_name || current.folder_name || id,
+      folder_path: row.path || row.folder_path || current.folder_path || row.name || id,
+      folder_url: current.folder_url || `https://drive.google.com/drive/folders/${id}`,
+      parent_folder_id: row.parent_id || row.parent_folder_id || current.parent_folder_id || null,
+      direct_images: Number(row.direct_images ?? current.direct_images ?? 0),
+      images: Number(row.images ?? current.images ?? row.direct_images ?? 0),
+      total_images: Number(row.images ?? current.total_images ?? current.images ?? row.direct_images ?? 0),
+      direct_child_count: Number(row.direct_child_count ?? current.direct_child_count ?? 0),
+      child_count: Number(row.child_count ?? current.child_count ?? 0),
+      live_drive: true
+    });
+  }
+  const configuredIds = new Set();
+  const remember = value => {
+    const id = String(typeof value === 'string' ? value : (value?.id || value?.folder_id || value?.drive_folder_id || '')).trim();
+    if (id) configuredIds.add(id);
+  };
+  for (const catalog of state.catalogs) remember(catalog.drive_folder_id);
+  for (const mapping of state.mappings) {
+    for (const value of mapping.resolved_folder_ids || mapping.selected_folders || mapping.drive_folders || []) remember(value);
+  }
+  for (const mapping of state.slideMappings) {
+    for (const value of mapping.drive_folder_ids || []) remember(value);
+    remember(mapping.drive_folder_id);
+  }
+  state.folders = [...folders.values()]
+    .filter(folder => !liveIds.size || liveIds.has(String(folder.folder_id)) || configuredIds.has(String(folder.folder_id)))
+    .map(folder => liveIds.has(String(folder.folder_id)) ? folder : { ...folder, unavailable_on_drive: liveIds.size > 0 });
+}
+
+async function loadDriveTree(force = false) {
+  if (state.driveTreeLoaded && !force) return state.driveTree;
+  if (state.driveTreePromise && !force) return state.driveTreePromise;
+  state.driveTreePromise = api('/api/slide-manager/drive/tree').then(data => {
+    state.driveTree = Array.isArray(data.folders) ? data.folders : [];
+    state.driveTreeLoaded = true;
+    mergeDriveTreeFolders(state.driveTree);
+    renderFolderPicker('m_folders');
+    renderFolderPicker('sm_folders');
+    if (typeof renderProducts === 'function') renderProducts();
+    return state.driveTree;
+  }).finally(() => { state.driveTreePromise = null; });
+  return state.driveTreePromise;
+}
+
+async function refreshDriveTree() {
+  busy(true);
+  try {
+    await loadDriveTree(true);
+    status(`Đã tải cây Google Drive: ${state.driveTree.length} thư mục, xếp đúng cha — con.`);
+  } catch (error) {
+    status(`Không tải được cây Google Drive: ${error.message}`, true);
+  } finally {
+    busy(false);
+  }
 }
 
 function fillAccountFilters() {
@@ -292,16 +410,51 @@ function setFolderSelection(id, values = []) {
 
 function selectedFolderIds(id) { return [...folderSelection(id)]; }
 
+function selectedFolderValues(id) {
+  return selectedFolderIds(id).map(folderId => {
+    const folder = state.folders.find(row => String(row.folder_id) === String(folderId));
+    return {
+      id: String(folderId),
+      name: folder?.folder_name || String(folderId),
+      path: folder?.folder_path || folder?.folder_name || String(folderId),
+      parent_id: folder?.parent_folder_id || null
+    };
+  });
+}
+
 function renderFolderPicker(id) {
   const container = $(id);
   if (!container) return;
   const selection = folderSelection(id);
   const query = String($(`${id}_search`)?.value || '').trim().toLocaleLowerCase('vi-VN');
-  const rows = folderTreeRows().filter(folder => !query || [folder.folder_name, folder._path, ...(folder.catalogs || [])].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  const allRows = folderTreeRows();
+  const byId = new Map(allRows.map(folder => [String(folder.folder_id), folder]));
+  const visibleIds = new Set();
+  if (query) {
+    for (const folder of allRows) {
+      if (![folder.folder_name, folder._path, ...(folder.catalogs || [])].join(' ').toLocaleLowerCase('vi-VN').includes(query)) continue;
+      let current = folder;
+      while (current && !visibleIds.has(String(current.folder_id))) {
+        visibleIds.add(String(current.folder_id));
+        current = byId.get(String(current.parent_folder_id || ''));
+      }
+    }
+  }
+  const rows = query ? allRows.filter(folder => visibleIds.has(String(folder.folder_id))) : allRows;
   container.innerHTML = rows.length ? rows.map(folder => {
     const selected = selection.has(String(folder.folder_id));
-    const padding = 9 + folder._depth * 22;
-    return `<label class="folder-option${selected ? ' selected' : ''}" style="padding-left:${padding}px!important"><input type="checkbox" value="${esc(folder.folder_id)}" ${selected ? 'checked' : ''} onchange="folderSelectionChanged('${id}',this)"><span><span class="folder-option-name">📁 ${esc(folder.folder_name || folder.folder_id)}</span><span class="badge info" style="margin-left:6px">${Number(folder.images || 0)} ảnh</span><div class="small muted folder-option-path">${esc(folder._path)}</div></span></label>`;
+    const padding = 10 + folder._depth * 22;
+    const totalImages = Number(folder.images ?? folder.total_images ?? folder.direct_images ?? 0);
+    const directImages = Number(folder.direct_images ?? totalImages);
+    const childCount = Number(folder.child_count || 0);
+    const detail = childCount
+      ? `${directImages} ảnh trực tiếp · ${childCount} thư mục con`
+      : `${directImages} ảnh trực tiếp`;
+    const branch = folder._depth ? '<span class="folder-branch">└─</span>' : '';
+    const driveBadge = folder.live_drive
+      ? '<span class="badge ok" style="margin-left:5px">Drive</span>'
+      : (folder.unavailable_on_drive ? '<span class="badge warn" style="margin-left:5px">Không còn thấy trên Drive</span>' : '');
+    return `<label class="folder-option${selected ? ' selected' : ''}" style="padding-left:${padding}px!important"><input type="checkbox" value="${esc(folder.folder_id)}" ${selected ? 'checked' : ''} onchange="folderSelectionChanged('${id}',this)"><span class="folder-option-content">${branch}<span class="folder-option-name">📁 ${esc(folder.folder_name || folder.folder_id)}</span><span class="badge info" style="margin-left:6px">${totalImages} ảnh tổng</span>${driveBadge}<div class="small muted folder-option-detail">${esc(detail)}</div><div class="small muted folder-option-path">${esc(folder._path)}</div></span></label>`;
   }).join('') : '<div class="empty">Không có thư mục phù hợp.</div>';
   const count = $(`${id}_count`);
   if (count) count.textContent = `${selection.size} thư mục`;

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node start.js",
+    "test": "node --test tests/*.test.js",
     "test:mapping-center": "node --test tests/mapping-center-route.test.js"
   },
   "dependencies": {

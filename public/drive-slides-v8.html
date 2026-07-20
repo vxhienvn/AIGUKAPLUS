@@ -57,6 +57,7 @@
   <section id="p-mappings" class="panel">
     <div class="panel-head"><h2>Toàn bộ Mapping QC</h2><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
     <div class="panel-body">
+      <div class="notice warning compact"><b>“Chưa chọn thư mục Drive”</b> là Mapping cũ đã có tên QC nhưng chưa có nhóm sản phẩm, catalog hoặc thư mục nguồn. Bot chưa có nguồn ảnh riêng cho QC đó; bấm <b>Sửa</b> để chọn phạm vi.</div>
       <div class="toolbar"><input id="mappingSearch" placeholder="Tìm Ad ID, tên QC, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="current">QC đang phát sinh trước</option><option value="all">Tất cả kể cả cũ</option><option value="stale">Chỉ Mapping cũ</option></select></div>
       <div class="table-wrap"><table><thead><tr><th>QC</th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
@@ -117,10 +118,10 @@
     <div class="field wide"><div class="notice compact">Hệ thống tự xác định Mapping theo catalog, nhóm hoặc tập thư mục đã chọn; không cần chọn “loại/vai trò” thủ công.</div></div>
     <div class="field wide"><label>Thư mục Drive — có thể chọn nhiều nhóm sản phẩm</label>
       <div class="folder-picker-inline">
-        <div class="folder-picker-toolbar"><input id="m_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('m_folders')"><button type="button" onclick="selectVisibleFolders('m_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('m_folders')">Bỏ chọn</button><span id="m_folders_count" class="badge info">0 thư mục</span></div>
+        <div class="folder-picker-toolbar"><input id="m_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('m_folders')"><button type="button" onclick="refreshDriveTree()">↻ Tải cây Drive</button><button type="button" onclick="selectVisibleFolders('m_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('m_folders')">Bỏ chọn</button><span id="m_folders_count" class="badge info">0 thư mục</span></div>
         <div id="m_folders" class="folder-options"></div>
       </div>
-      <div class="small muted">Tích trực tiếp từng thư mục; thư mục con được xếp ngay dưới thư mục cha. Quản lý kết nối ở tab Kết nối Google Drive.</div>
+      <div class="small muted">Cây được đọc trực tiếp từ Google Drive; thư mục con nằm ngay dưới thư mục cha. “Ảnh tổng” đã cộng toàn bộ ảnh trong các thư mục con.</div>
     </div>
     <div class="field wide"><label>Ghi chú</label><textarea id="m_notes" rows="2"></textarea></div>
     <div class="field"><label><input type="checkbox" id="m_active" checked> Đang bật</label></div>
@@ -138,13 +139,13 @@
   <div class="field"><label>Page</label><select id="sm_page"><option value="">Tất cả Page</option></select></div>
   <div class="field wide"><label>Thư mục Drive</label>
     <div class="folder-picker-inline">
-      <div class="folder-picker-toolbar"><input id="sm_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('sm_folders')"><button type="button" onclick="selectVisibleFolders('sm_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('sm_folders')">Bỏ chọn</button><span id="sm_folders_count" class="badge info">0 thư mục</span></div>
+      <div class="folder-picker-toolbar"><input id="sm_folders_search" placeholder="Tìm tên hoặc đường dẫn thư mục…" oninput="renderFolderPicker('sm_folders')"><button type="button" onclick="refreshDriveTree()">↻ Tải cây Drive</button><button type="button" onclick="selectVisibleFolders('sm_folders',true)">Chọn đang lọc</button><button type="button" onclick="clearFolderSelection('sm_folders')">Bỏ chọn</button><span id="sm_folders_count" class="badge info">0 thư mục</span></div>
       <div id="sm_folders" class="folder-options"></div>
     </div>
   </div>
   <div class="field"><label>Ưu tiên</label><input id="sm_priority" type="number" value="100"></div>
   <div class="field"><label><input id="sm_active" type="checkbox" checked> Đang bật</label></div>
-  <div class="field"><label><input id="sm_sync" type="checkbox"> Yêu cầu đồng bộ lại</label></div>
+  <div class="field"><label><input id="sm_sync" type="checkbox" checked> Đồng bộ ảnh ngay sau khi lưu</label></div>
   <div class="field wide"><label>Ghi chú</label><textarea id="sm_note" rows="2"></textarea></div>
 </div>
 <div class="form-actions"><button class="primary">Lưu sản phẩm/Drive</button></div>
