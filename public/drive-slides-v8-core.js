@@ -122,7 +122,7 @@ function mappingHasUsableScope(mapping) {
 
 function metaEffectiveStatus(row) {
   if (!row?.meta_seen) return 'HISTORICAL';
-  return String(row.meta_effective_status || row.effective_status || row.status || '').trim().toUpperCase() || 'UNKNOWN';
+  return String(row.meta_delivery_status || row.delivery_status || row.meta_effective_status || row.effective_status || row.status || '').trim().toUpperCase() || 'UNKNOWN';
 }
 
 function isActiveMetaAd(row) {
@@ -162,12 +162,19 @@ function mergeMetaAds() {
       adset_name: row.adset_name || current.adset_name,
       ad_account_id: accountId,
       ad_account_name: row.ad_account_name || account?.ad_account_name || current.ad_account_name,
+      account_status: row.account_status ?? account?.account_status ?? current.account_status ?? '',
       business_id: row.business_id || account?.business_id || current.business_id || '',
       business_name: row.business_name || account?.business_name || current.business_name || '',
+      campaign_status: row.campaign_status || current.campaign_status || '',
+      campaign_effective_status: row.campaign_effective_status || current.campaign_effective_status || '',
+      adset_status: row.adset_status || current.adset_status || '',
+      adset_effective_status: row.adset_effective_status || current.adset_effective_status || '',
       effective_status: row.effective_status || row.status || '',
       configured_status: row.configured_status || current.configured_status || '',
+      delivery_status: row.delivery_status || row.effective_status || row.status || '',
       meta_seen: true,
-      meta_effective_status: row.effective_status || row.status || ''
+      meta_effective_status: row.effective_status || row.status || '',
+      meta_delivery_status: row.delivery_status || row.effective_status || row.status || ''
     });
     const mapping = state.mappings.find(item => String(item.ad_id) === id);
     current.mapping = mapping || current.mapping;
@@ -396,6 +403,8 @@ async function refreshDriveTree() {
 function fillAccountFilters() {
   fillSelect($('currentBusiness'), state.businesses, 'business_id', row => `BM: ${row.business_name || row.business_id}`, 'Tất cả BM AIGUKA nhìn thấy');
   fillAccountSelect();
+  fillSelect($('mappingBusiness'), state.businesses, 'business_id', row => `BM: ${row.business_name || row.business_id}`, 'Tất cả BM AIGUKA nhìn thấy');
+  fillMappingAccountSelect();
 }
 
 function fillAccountSelect() {
@@ -407,6 +416,17 @@ function fillAccountSelect() {
 function businessFilterChanged() {
   fillAccountSelect();
   renderCurrent();
+}
+
+function fillMappingAccountSelect() {
+  const businessId = $('mappingBusiness').value;
+  const accounts = state.adAccounts.filter(row => !businessId || String(row.business_id || '') === businessId);
+  fillSelect($('mappingAccount'), accounts, 'ad_account_id', row => `${row.ad_account_name || row.ad_account_id} — ${row.ad_account_id}`, 'Tất cả tài khoản quảng cáo');
+}
+
+function mappingBusinessFilterChanged() {
+  fillMappingAccountSelect();
+  renderMappings();
 }
 
 function fillSelects() {

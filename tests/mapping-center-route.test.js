@@ -49,6 +49,8 @@ const fixtureByResource = {
 
 test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản QC/BM', async t => {
   const nativeFetch = globalThis.fetch;
+  const previousMetaToken = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = 'test-meta-token';
   globalThis.fetch = async (input, options) => {
     const url = new URL(String(input));
     if (url.origin === 'http://supabase.test' && url.pathname.startsWith('/rest/v1/')) {
@@ -58,9 +60,47 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
         headers: { 'Content-Type': 'application/json' }
       });
     }
+    if (url.hostname === 'graph.facebook.com') {
+      const json = data => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (url.pathname.endsWith('/me/adaccounts')) {
+        return json({ data: [
+          { id: 'account-1', account_id: 'account-1', name: 'QC 1', account_status: 1, business: { id: 'business-1', name: 'BM 1' } },
+          { id: 'account-2', account_id: 'account-2', name: 'QC đã tắt', account_status: 2, business: { id: 'business-1', name: 'BM 1' } }
+        ] });
+      }
+      if (url.pathname.endsWith('/me/businesses')) return json({ data: [{ id: 'business-1', name: 'BM 1' }] });
+      if (url.pathname.includes('/act_account-1/ads')) {
+        const fields = url.searchParams.get('fields') || '';
+        assert.match(fields, /campaign\{id,name,status,effective_status\}/);
+        assert.match(fields, /adset\{id,name,status,effective_status,promoted_object\}/);
+        return json({ data: [
+          {
+            id: 'ad-1', name: 'QC hoạt động', account_id: 'account-1', status: 'ACTIVE', effective_status: 'ACTIVE', configured_status: 'ACTIVE',
+            campaign: { id: 'campaign-1', name: 'Cửa hàng 2', status: 'ACTIVE', effective_status: 'ACTIVE' },
+            adset: { id: 'adset-1', name: 'Cửa hàng 26-35 - Bản sao', status: 'ACTIVE', effective_status: 'ACTIVE', promoted_object: { page_id: 'page-1' } }
+          },
+          {
+            id: 'ad-2', name: 'QC có nhóm đã tắt', account_id: 'account-1', status: 'ACTIVE', effective_status: 'ACTIVE', configured_status: 'ACTIVE',
+            campaign: { id: 'campaign-2', name: 'Cửa hàng 1', status: 'ACTIVE', effective_status: 'ACTIVE' },
+            adset: { id: 'adset-2', name: 'Cửa hàng 26km', status: 'PAUSED', effective_status: 'PAUSED', promoted_object: { page_id: 'page-1' } }
+          }
+        ] });
+      }
+      if (url.pathname.includes('/act_account-2/ads')) {
+        return json({ data: [{
+          id: 'ad-3', name: 'QC thuộc tài khoản đã tắt', account_id: 'account-2', status: 'ACTIVE', effective_status: 'ACTIVE', configured_status: 'ACTIVE',
+          campaign: { id: 'campaign-3', name: 'Chiến dịch cũ', status: 'ACTIVE', effective_status: 'ACTIVE' },
+          adset: { id: 'adset-3', name: 'Nhóm cũ', status: 'ACTIVE', effective_status: 'ACTIVE', promoted_object: { page_id: 'page-1' } }
+        }] });
+      }
+    }
     return nativeFetch(input, options);
   };
-  t.after(() => { globalThis.fetch = nativeFetch; });
+  t.after(() => {
+    globalThis.fetch = nativeFetch;
+    if (previousMetaToken === undefined) delete process.env.META_ACCESS_TOKEN;
+    else process.env.META_ACCESS_TOKEN = previousMetaToken;
+  });
 
   const app = express();
   installMappingCenter(app, { supabaseUrl: 'http://supabase.test', serviceRoleKey: 'test-key' });
@@ -91,9 +131,20 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.equal(bootstrap.ad_accounts[0].ad_account_name, 'QC 1');
   assert.deepEqual(bootstrap.businesses, [{ business_id: 'business-1', business_name: 'business-1' }]);
 
+  const meta = await nativeFetch(`${base}/api/ad-mapping/meta?sync=1`).then(response => response.json());
+  assert.equal(meta.ok, true);
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-1').delivery_status, 'ACTIVE');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-2').delivery_status, 'ADSET_PAUSED');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-2').adset_status, 'PAUSED');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-3').delivery_status, 'ACCOUNT_DISABLED');
+  assert.equal(meta.rows.find(row => row.ad_id === 'ad-3').account_status, 2);
+
   const html = await nativeFetch(`${base}/drive-slides`).then(response => response.text());
   assert.match(html, /id="currentBusiness"/);
   assert.match(html, /id="currentAccount"/);
+  assert.match(html, /id="mappingBusiness"/);
+  assert.match(html, /id="mappingAccount"/);
+  assert.match(html, /Tất cả tài khoản quảng cáo/);
   assert.match(html, /id="currentMetaState"/);
   assert.match(html, /<option value="active">Meta: Đang hoạt động<\/option>/);
   assert.match(html, /id="currentTableSummary"/);
@@ -116,6 +167,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(coreSource, /meta_seen: false/);
   assert.match(coreSource, /meta_seen: true/);
   assert.match(coreSource, /function isActiveMetaAd/);
+  assert.match(coreSource, /meta_delivery_status/);
+  assert.match(coreSource, /function fillMappingAccountSelect/);
+  assert.match(coreSource, /function mappingBusinessFilterChanged/);
   assert.match(coreSource, /state\.currentAds\.filter\(isActiveMetaAd\)/);
 
   const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
@@ -140,6 +194,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(mappingRenderer, /Chiến dịch:/);
   assert.match(mappingRenderer, /Nhóm:/);
   assert.match(mappingRenderer, /hasRecentReferral/);
+  assert.match(mappingRenderer, /mappingBusiness/);
+  assert.match(mappingRenderer, /mappingAccount/);
+  assert.match(mappingRenderer, /mappingAccountContext/);
   assert.match(mappingRenderer, /statusDotHtml/);
   assert.doesNotMatch(mappingRenderer, /class="id"|mapping\.ad_account_name/);
   assert.match(productRenderer, /statusDotHtml/);
@@ -155,6 +212,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(renderSource, /QC cũ đã có bản ghi/);
   assert.match(renderSource, /Mapping đã tắt/);
   assert.match(renderSource, /Thiếu nguồn ảnh/);
+  assert.match(renderSource, /ACCOUNT_DISABLED/);
+  assert.match(renderSource, /ACCOUNT_UNSETTLED/);
+  assert.match(renderSource, /ACCOUNT_CLOSED/);
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
   assert.match(renderSource, /\/api\/slide-manager\/drive\/sync-all/);

@@ -41,7 +41,7 @@
   </div>
 
   <section id="p-current" class="panel active">
-    <div class="panel-head"><div><h2>QC Meta đang hoạt động</h2><div class="panel-description">Mặc định chỉ hiện quảng cáo có <b>effective_status = ACTIVE</b> trên Meta; số khách lấy trong 45 ngày gần nhất.</div></div></div>
+    <div class="panel-head"><div><h2>QC Meta đang hoạt động</h2><div class="panel-description">Mặc định chỉ hiện khi <b>tài khoản, chiến dịch, nhóm quảng cáo và QC đều hoạt động</b> trên Meta; số khách lấy trong 45 ngày gần nhất.</div></div></div>
     <div class="panel-body">
       <div class="notice">QC mới chưa Mapping sẽ <b>không bị ép sản phẩm</b>. Bot chỉ dùng lời khách hoặc hỏi lại cho đến khi bạn lưu Mapping.</div>
       <div class="toolbar">
@@ -60,7 +60,12 @@
     <div class="panel-head"><div><h2>Tất cả Mapping QC</h2><div class="panel-description">Kho cấu hình đã lưu, gồm cả QC đang chạy, tạm dừng và QC cũ; dùng để kiểm tra, sửa hoặc tắt nguồn ảnh.</div></div><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
     <div class="panel-body">
       <div class="notice warning compact"><b>“Chưa chọn thư mục Drive”</b> là Mapping cũ đã có tên QC nhưng chưa có nhóm sản phẩm, catalog hoặc thư mục nguồn. Bot chưa có nguồn ảnh riêng cho QC đó; bấm <b>Sửa</b> để chọn phạm vi.</div>
-      <div class="toolbar"><input id="mappingSearch" placeholder="Tìm tên QC, quảng cáo, chiến dịch, nhóm, catalog..." oninput="renderMappings()"><select id="mappingAge" onchange="renderMappings()"><option value="all">Tất cả Mapping</option><option value="current">Có khách trong 45 ngày</option><option value="stale">Không có khách trong 45 ngày</option></select></div>
+      <div class="toolbar">
+        <select id="mappingBusiness" onchange="mappingBusinessFilterChanged()"><option value="">Tất cả BM AIGUKA nhìn thấy</option></select>
+        <select id="mappingAccount" onchange="renderMappings()"><option value="">Tất cả tài khoản quảng cáo</option></select>
+        <input id="mappingSearch" placeholder="Tìm tên QC, quảng cáo, chiến dịch, nhóm, tài khoản, catalog..." oninput="renderMappings()">
+        <select id="mappingAge" onchange="renderMappings()"><option value="all">Tất cả Mapping</option><option value="current">Có khách trong 45 ngày</option><option value="stale">Không có khách trong 45 ngày</option></select>
+      </div>
       <div class="table-wrap"><table><thead><tr><th><div class="column-heading"><span>Tên QC / Quảng cáo</span><button id="mappingStatusSort" class="header-sort" type="button" onclick="toggleStatusSort('mapping')" title="Sắp xếp theo trạng thái">Trạng thái ↕</button></div></th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
   </section>

@@ -460,6 +460,49 @@ export function installMappingCenter(app, options = {}) {
         return [...accounts.values()].sort((a, b) => String(a.ad_account_name).localeCompare(String(b.ad_account_name), 'vi'));
     }
 
+    function normalizedMetaStatus(value) {
+        return String(value ?? '').trim().toUpperCase();
+    }
+
+    function adAccountDeliveryStatus(value) {
+        const status = normalizedMetaStatus(value);
+        if (!status || status === '1' || status === 'ACTIVE') return '';
+        const labels = {
+            '2': 'ACCOUNT_DISABLED',
+            DISABLED: 'ACCOUNT_DISABLED',
+            '3': 'ACCOUNT_UNSETTLED',
+            UNSETTLED: 'ACCOUNT_UNSETTLED',
+            '7': 'ACCOUNT_PENDING_RISK_REVIEW',
+            PENDING_RISK_REVIEW: 'ACCOUNT_PENDING_RISK_REVIEW',
+            '8': 'ACCOUNT_PENDING_SETTLEMENT',
+            PENDING_SETTLEMENT: 'ACCOUNT_PENDING_SETTLEMENT',
+            '9': 'ACCOUNT_IN_GRACE_PERIOD',
+            IN_GRACE_PERIOD: 'ACCOUNT_IN_GRACE_PERIOD',
+            '100': 'ACCOUNT_PENDING_CLOSURE',
+            PENDING_CLOSURE: 'ACCOUNT_PENDING_CLOSURE',
+            '101': 'ACCOUNT_CLOSED',
+            CLOSED: 'ACCOUNT_CLOSED'
+        };
+        return labels[status] || 'ACCOUNT_INACTIVE';
+    }
+
+    function hierarchyDeliveryStatus(ad, account = {}) {
+        const accountStatus = adAccountDeliveryStatus(account.account_status);
+        if (accountStatus) return accountStatus;
+
+        const campaignStatus = normalizedMetaStatus(ad.campaign?.effective_status || ad.campaign?.status);
+        if (campaignStatus && campaignStatus !== 'ACTIVE') {
+            return campaignStatus === 'PAUSED' ? 'CAMPAIGN_PAUSED' : campaignStatus;
+        }
+
+        const adsetStatus = normalizedMetaStatus(ad.adset?.effective_status || ad.adset?.status);
+        if (adsetStatus && adsetStatus !== 'ACTIVE') {
+            return adsetStatus === 'PAUSED' ? 'ADSET_PAUSED' : adsetStatus;
+        }
+
+        return normalizedMetaStatus(ad.effective_status || ad.status) || 'UNKNOWN';
+    }
+
     function metaRootToken() {
         return String(
             process.env.META_ACCESS_TOKEN ||
@@ -546,26 +589,36 @@ export function installMappingCenter(app, options = {}) {
             }
         }
         const batches = await Promise.all(accountIds.map(async accountId => {
-            const fields = 'id,name,status,effective_status,configured_status,account_id,campaign{id,name},adset{id,name,promoted_object}';
+            const fields = 'id,name,status,effective_status,configured_status,account_id,campaign{id,name,status,effective_status},adset{id,name,status,effective_status,promoted_object}';
             const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/act_${encodeURIComponent(accountId)}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${encodeURIComponent(token)}`;
             try {
                 const ads = await metaPages(url, 10);
-                return ads.map(ad => ({
-                    ad_id: String(ad.id || ''),
-                    ad_name: ad.name || '',
-                    ad_account_id: String(ad.account_id || accountId).replace(/^act_/, ''),
-                    ad_account_name: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.ad_account_name || '',
-                    business_id: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.business_id || '',
-                    business_name: accountById.get(String(ad.account_id || accountId).replace(/^act_/, ''))?.business_name || '',
-                    campaign_id: String(ad.campaign?.id || ''),
-                    campaign_name: ad.campaign?.name || '',
-                    adset_id: String(ad.adset?.id || ''),
-                    adset_name: ad.adset?.name || '',
-                    page_id: String(ad.adset?.promoted_object?.page_id || ''),
-                    status: ad.status || '',
-                    effective_status: ad.effective_status || '',
-                    configured_status: ad.configured_status || ''
-                }));
+                return ads.map(ad => {
+                    const resolvedAccountId = String(ad.account_id || accountId).replace(/^act_/, '');
+                    const account = accountById.get(resolvedAccountId) || {};
+                    return {
+                        ad_id: String(ad.id || ''),
+                        ad_name: ad.name || '',
+                        ad_account_id: resolvedAccountId,
+                        ad_account_name: account.ad_account_name || '',
+                        account_status: account.account_status ?? '',
+                        business_id: account.business_id || '',
+                        business_name: account.business_name || '',
+                        campaign_id: String(ad.campaign?.id || ''),
+                        campaign_name: ad.campaign?.name || '',
+                        campaign_status: ad.campaign?.status || '',
+                        campaign_effective_status: ad.campaign?.effective_status || '',
+                        adset_id: String(ad.adset?.id || ''),
+                        adset_name: ad.adset?.name || '',
+                        adset_status: ad.adset?.status || '',
+                        adset_effective_status: ad.adset?.effective_status || '',
+                        page_id: String(ad.adset?.promoted_object?.page_id || ''),
+                        status: ad.status || '',
+                        effective_status: ad.effective_status || '',
+                        configured_status: ad.configured_status || '',
+                        delivery_status: hierarchyDeliveryStatus(ad, account)
+                    };
+                });
             } catch (error) {
                 console.warn(`[MAPPING_CENTER] Meta account ${accountId}:`, error.message);
                 return [];

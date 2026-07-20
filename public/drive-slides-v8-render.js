@@ -8,8 +8,8 @@ function mappingFolderIds(mapping) {
 function statusDotHtml(value, customLabel = '') {
   const statusValue = String(value || '').trim().toUpperCase();
   const active = new Set(['ACTIVE', 'SUCCESS', 'CONNECTED', 'CATALOG']);
-  const waiting = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'REQUESTED', 'IDLE']);
-  const stopped = new Set(['OFF', 'DISABLED', 'DISAPPROVED', 'WITH_ISSUES', 'ERROR', 'FAILED']);
+  const waiting = new Set(['PAUSED', 'AD_PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'REQUESTED', 'IDLE', 'PENDING_BILLING_INFO', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE']);
+  const stopped = new Set(['OFF', 'DISABLED', 'DISAPPROVED', 'WITH_ISSUES', 'ERROR', 'FAILED', 'DELETED', 'ARCHIVED', 'ACCOUNT_DISABLED', 'ACCOUNT_UNSETTLED', 'ACCOUNT_CLOSED', 'ACCOUNT_INACTIVE']);
   const tone = active.has(statusValue) ? 'live' : (waiting.has(statusValue) ? 'waiting' : (stopped.has(statusValue) ? 'stopped' : 'unknown'));
   const labels = {
     ACTIVE: 'Đang hoạt động',
@@ -17,6 +17,7 @@ function statusDotHtml(value, customLabel = '') {
     CONNECTED: 'Đã kết nối',
     CATALOG: 'Theo catalog',
     PAUSED: 'Đang tạm dừng',
+    AD_PAUSED: 'QC đang tạm dừng',
     CAMPAIGN_PAUSED: 'Chiến dịch đang tạm dừng',
     ADSET_PAUSED: 'Nhóm quảng cáo đang tạm dừng',
     PENDING_REVIEW: 'Đang chờ duyệt',
@@ -28,6 +29,17 @@ function statusDotHtml(value, customLabel = '') {
     DISABLED: 'Đã tắt',
     DISAPPROVED: 'Không được duyệt',
     WITH_ISSUES: 'Có lỗi',
+    PENDING_BILLING_INFO: 'Đang chờ thông tin thanh toán',
+    DELETED: 'Đã xóa trên Meta',
+    ARCHIVED: 'Đã lưu trữ trên Meta',
+    ACCOUNT_DISABLED: 'Tài khoản quảng cáo đã bị vô hiệu hóa',
+    ACCOUNT_UNSETTLED: 'Tài khoản quảng cáo chưa thanh toán',
+    ACCOUNT_CLOSED: 'Tài khoản quảng cáo đã đóng',
+    ACCOUNT_INACTIVE: 'Tài khoản quảng cáo không hoạt động',
+    ACCOUNT_PENDING_RISK_REVIEW: 'Tài khoản quảng cáo đang chờ kiểm tra rủi ro',
+    ACCOUNT_PENDING_SETTLEMENT: 'Tài khoản quảng cáo đang chờ thanh toán',
+    ACCOUNT_IN_GRACE_PERIOD: 'Tài khoản quảng cáo đang trong thời gian gia hạn',
+    ACCOUNT_PENDING_CLOSURE: 'Tài khoản quảng cáo đang chờ đóng',
     ERROR: 'Có lỗi',
     FAILED: 'Thất bại',
     HISTORICAL: 'Chỉ có trong lịch sử khách hoặc Mapping cũ',
@@ -40,9 +52,9 @@ function statusDotHtml(value, customLabel = '') {
 function statusRank(value) {
   const statusValue = String(value || '').trim().toUpperCase();
   if (statusValue === 'ACTIVE') return 0;
-  if (['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED'].includes(statusValue)) return 1;
-  if (['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'].includes(statusValue)) return 2;
-  if (['WITH_ISSUES', 'DISAPPROVED', 'ERROR', 'FAILED', 'OFF', 'DISABLED'].includes(statusValue)) return 3;
+  if (['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED', 'ACCOUNT_PENDING_RISK_REVIEW', 'ACCOUNT_PENDING_SETTLEMENT', 'ACCOUNT_IN_GRACE_PERIOD', 'ACCOUNT_PENDING_CLOSURE'].includes(statusValue)) return 1;
+  if (['PAUSED', 'AD_PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'PENDING_BILLING_INFO'].includes(statusValue)) return 2;
+  if (['WITH_ISSUES', 'DISAPPROVED', 'ERROR', 'FAILED', 'OFF', 'DISABLED', 'DELETED', 'ARCHIVED', 'ACCOUNT_DISABLED', 'ACCOUNT_UNSETTLED', 'ACCOUNT_CLOSED', 'ACCOUNT_INACTIVE'].includes(statusValue)) return 3;
   return 4;
 }
 
@@ -171,6 +183,17 @@ function renderCurrent() {
 
 function mappingCurrentInfo(adId) { return state.currentAds.find(row => String(row.ad_id) === String(adId)); }
 
+function mappingAccountContext(mapping, current = mappingCurrentInfo(mapping?.ad_id)) {
+  const accountId = String(current?.ad_account_id || mapping?.ad_account_id || '');
+  const account = state.adAccounts.find(row => String(row.ad_account_id || '') === accountId);
+  return {
+    accountId,
+    accountName: current?.ad_account_name || mapping?.ad_account_name || account?.ad_account_name || '',
+    businessId: String(current?.business_id || account?.business_id || ''),
+    businessName: current?.business_name || account?.business_name || ''
+  };
+}
+
 function hasRecentReferral(row) {
   return Boolean(row?.last_referral) || Number(row?.referrals || 0) > 0;
 }
@@ -178,7 +201,16 @@ function hasRecentReferral(row) {
 function renderMappings() {
   const query = $('mappingSearch').value.toLocaleLowerCase('vi-VN').trim();
   const mode = $('mappingAge').value;
-  let rows = state.mappings.filter(mapping => !query || [mapping.ad_id, mapping.ad_name, mapping.campaign_name, mapping.adset_name, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN').includes(query));
+  const businessId = $('mappingBusiness').value;
+  const accountId = $('mappingAccount').value;
+  let rows = state.mappings.filter(mapping => {
+    const current = mappingCurrentInfo(mapping.ad_id);
+    const account = mappingAccountContext(mapping, current);
+    const searchable = [mapping.ad_id, mapping.ad_name, mapping.campaign_name, mapping.adset_name, account.accountId, account.accountName, account.businessName, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN');
+    return (!businessId || account.businessId === businessId) &&
+      (!accountId || account.accountId === accountId) &&
+      (!query || searchable.includes(query));
+  });
   rows = rows.filter(mapping => {
     const current = mappingCurrentInfo(mapping.ad_id);
     const recent = hasRecentReferral(current);
