@@ -95,6 +95,9 @@ function mappingScope(mapping) {
 function mappingLabel(mapping) {
   if (!mapping) return '<span class="badge bad">Chưa Mapping</span>';
   const scope = mappingScope(mapping);
+  if (mapping.is_active === false || mapping.enabled === false) {
+    return `<span class="badge bad">Mapping đã tắt</span><div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small muted">Bot không sử dụng nguồn ảnh này</div>`;
+  }
   if (!mappingHasUsableScope(mapping)) {
     return `<span class="badge warn">Thiếu nguồn ảnh</span><div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small warn-text">Cần chọn nhóm sản phẩm, catalog hoặc thư mục Drive</div>`;
   }
@@ -126,7 +129,13 @@ function currentRows() {
 }
 
 function folderListHtml(mapping) {
+  if (!mapping) {
+    return '<span class="badge bad">Chưa có nguồn Drive</span><div class="small muted">QC chưa tạo Mapping; bấm <b>Mapping ngay</b> để chọn nguồn ảnh.</div>';
+  }
   const ids = mappingFolderIds(mapping);
+  if (mapping.is_active === false || mapping.enabled === false) {
+    return '<span class="badge bad">Mapping đã tắt</span><div class="small muted">Bot không sử dụng nguồn Drive đã lưu.</div>';
+  }
   if (!ids.length && !mappingHasUsableScope(mapping)) {
     return '<span class="badge warn">Chưa chọn thư mục Drive</span><div class="small warn-text">QC cũ đã có bản ghi nhưng Bot chưa có nguồn ảnh riêng.</div>';
   }
@@ -151,10 +160,11 @@ function renderCurrent() {
   for (const row of rows) {
     const campaign = row.campaign_name || row.mapping?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
     const adset = row.adset_name || row.mapping?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
+    const adName = row.ad_title || row.ad_name || row.mapping?.ad_name || 'Chưa đồng bộ tên quảng cáo';
     const effectiveStatus = metaEffectiveStatus(row);
     const statusDot = statusDotHtml(effectiveStatus);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
+    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div><div class="current-ad-name"><span>QC:</span> <b>${esc(adName)}</b></div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
     body.appendChild(tr);
   }
 }
