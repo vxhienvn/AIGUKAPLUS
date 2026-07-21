@@ -200,7 +200,10 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(html, /Tên QC \/ Quảng cáo/);
   assert.match(html, /onclick="toggleStatusSort\('current'\)"/);
   assert.match(html, /onclick="toggleStatusSort\('mapping'\)"/);
-  assert.match(html, /Tất cả Mapping QC/);
+  assert.match(html, /Tất cả QC & Mapping/);
+  assert.match(html, /QC Meta chưa có Mapping vẫn được hiển thị/);
+  assert.match(html, /id="mappingState"/);
+  assert.match(html, /id="mappingTableSummary"/);
   assert.doesNotMatch(html, /<th>QC<\/th>|Tài khoản QC \/ Quảng cáo/);
   assert.match(html, /Chưa chọn thư mục Drive/);
   assert.match(html, /id="syncAllProducts"/);
@@ -230,6 +233,17 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
 
   const renderSource = await nativeFetch(`${base}/admin/drive-slides-v8-render.js`).then(response => response.text());
   const cssSource = await nativeFetch(`${base}/admin/drive-slides-v8.css`).then(response => response.text());
+  const inventoryHelper = renderSource.match(/function mappingInventoryRows\([\s\S]*?\n\}\n\nfunction renderMappings/)?.[0].replace(/\n\nfunction renderMappings$/, '') || '';
+  assert.ok(inventoryHelper);
+  const inventoryRows = Function('state', `${inventoryHelper}; return mappingInventoryRows();`)({
+    mappings: [{ ad_id: 'ad-1', ad_name: 'Đã Mapping' }],
+    currentAds: [
+      { ad_id: 'ad-1', ad_name: 'Đã Mapping', meta_seen: true },
+      { ad_id: 'ad-new', ad_name: 'QC Meta mới', meta_seen: true },
+      { ad_id: 'ad-history', ad_name: 'Chỉ có lịch sử', meta_seen: false }
+    ]
+  });
+  assert.deepEqual(inventoryRows.map(row => [row.ad_id, row.has_saved_mapping]), [['ad-1', true], ['ad-new', false]]);
   const currentRenderer = renderSource.match(/function renderCurrent\(\) \{[\s\S]*?\n\}\n\nfunction mappingCurrentInfo/)?.[0] || '';
   const mappingRenderer = renderSource.match(/function renderMappings\(\) \{[\s\S]*?\n\}\n\nfunction catalogDescendantKeys/)?.[0] || '';
   const productRenderer = renderSource.match(/function renderProducts\(\) \{[\s\S]*?\n\}\n\nfunction renderRuntime/)?.[0] || '';
@@ -246,7 +260,7 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.doesNotMatch(currentRenderer, /row\.page_name|row\.page_id|class="id"|ad_account_name|business_name/);
   assert.match(mappingRenderer, /campaign_name/);
   assert.match(mappingRenderer, /adset_name/);
-  assert.match(mappingRenderer, /mapping\.ad_name/);
+  assert.match(mappingRenderer, /mapping\?\.ad_name/);
   assert.match(mappingRenderer, /Chiến dịch:/);
   assert.match(mappingRenderer, /Nhóm:/);
   assert.match(mappingRenderer, /hasRecentReferral/);
@@ -276,6 +290,9 @@ test('Mapping Center đồng bộ folder cũ và trả danh sách tài khoản Q
   assert.match(renderSource, /syncAllSlideMappings/);
   assert.match(renderSource, /maybeAutoSyncAllSlideMappings/);
   assert.match(renderSource, /function renderCatalogs/);
+  assert.match(renderSource, /function mappingInventoryRows/);
+  assert.match(renderSource, /has_saved_mapping: false/);
+  assert.match(renderSource, /Mapping ngay/);
   assert.match(renderSource, /function saveCatalog/);
   assert.match(renderSource, /function reorderCatalog/);
   assert.match(renderSource, /Mã catalog đã khóa/);
