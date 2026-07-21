@@ -49,6 +49,7 @@ function showTab(id, button) {
   if (id === 'products' && typeof maybeAutoSyncAllSlideMappings === 'function') {
     maybeAutoSyncAllSlideMappings();
   }
+  renderHeaderStats(id === 'current' ? 'current' : (id === 'mappings' ? 'mapping' : ''));
 }
 
 function adminHeaders() {
@@ -576,20 +577,39 @@ function prepareDriveFrame(frame) {
   }
 }
 
-function renderAll() {
-  const summary = state.data?.summary || {};
-  const activeMetaAds = state.currentAds.filter(isActiveMetaAd);
+function renderHeaderStats(kind = '') {
+  const businessId = kind === 'current'
+    ? ($('currentBusiness')?.value || '')
+    : (kind === 'mapping' ? ($('mappingBusiness')?.value || '') : '');
+  const accountId = kind === 'current'
+    ? ($('currentAccount')?.value || '')
+    : (kind === 'mapping' ? ($('mappingAccount')?.value || '') : '');
+  const accountById = new Map(state.adAccounts.map(row => [String(row.ad_account_id || ''), row]));
+  const currentByAd = new Map(state.currentAds.map(row => [String(row.ad_id || ''), row]));
+  const matchesScope = (row, mapping = null) => {
+    const resolvedAccountId = String(row?.ad_account_id || mapping?.ad_account_id || '');
+    const account = accountById.get(resolvedAccountId);
+    const resolvedBusinessId = String(row?.business_id || account?.business_id || '');
+    return (!businessId || resolvedBusinessId === businessId) && (!accountId || resolvedAccountId === accountId);
+  };
+  const activeMetaAds = state.currentAds.filter(isActiveMetaAd).filter(row => matchesScope(row, row.mapping));
+  const savedMappings = state.mappings.filter(mapping => matchesScope(currentByAd.get(String(mapping.ad_id || '')), mapping));
   $('sCurrent').textContent = activeMetaAds.length;
   $('sMapped').textContent = activeMetaAds.filter(row => row.mapped).length;
   $('sUnmapped').textContent = activeMetaAds.filter(row => !row.mapped).length;
-  $('sTotal').textContent = state.mappings.length;
-  $('sImages').textContent = summary.active_images || 0;
+  $('sTotal').textContent = savedMappings.length;
+  $('sImages').textContent = state.data?.summary?.active_images || 0;
+}
+
+function renderAll() {
   renderCurrent();
   renderMappings();
   renderProducts();
   if (typeof renderCatalogs === 'function') renderCatalogs();
   renderRuntime();
   renderLog();
+  const activePanel = document.querySelector('.panel.active')?.id || '';
+  renderHeaderStats(activePanel === 'p-current' ? 'current' : (activePanel === 'p-mappings' ? 'mapping' : ''));
 }
 
 const initialTab = new URLSearchParams(location.search).get('tab');

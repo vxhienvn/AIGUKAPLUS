@@ -32,7 +32,7 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="current" onclick="showTab('current',this)">QC Meta đang phân phối</button>
-    <button class="tab" data-tab="mappings" onclick="showTab('mappings',this)">Tất cả Mapping QC</button>
+    <button class="tab" data-tab="mappings" onclick="showTab('mappings',this)">Tất cả QC & Mapping</button>
     <button class="tab" data-tab="products" onclick="showTab('products',this)">Sản phẩm & Drive</button>
     <button class="tab" data-tab="catalogs" onclick="showTab('catalogs',this)">Quản lý Catalog</button>
     <button class="tab" data-tab="runtime" onclick="showTab('runtime',this)">Chế độ Mapping</button>
@@ -58,15 +58,17 @@
   </section>
 
   <section id="p-mappings" class="panel">
-    <div class="panel-head"><div><h2>Tất cả Mapping QC</h2><div class="panel-description">Kho cấu hình đã lưu, gồm cả QC đang chạy, tạm dừng và QC cũ; dùng để kiểm tra, sửa hoặc tắt nguồn ảnh.</div></div><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
+    <div class="panel-head"><div><h2>Tất cả QC & Mapping</h2><div class="panel-description">Hợp nhất toàn bộ QC Meta hiện tại với Mapping đã lưu, gồm cả QC chưa Mapping, đang chạy, tạm dừng và QC cũ.</div></div><button class="primary" onclick="openMapping({})">+ Thêm Mapping</button></div>
     <div class="panel-body">
-      <div class="notice warning compact"><b>“Chưa chọn thư mục Drive”</b> là Mapping cũ đã có tên QC nhưng chưa có nhóm sản phẩm, catalog hoặc thư mục nguồn. Bot chưa có nguồn ảnh riêng cho QC đó; bấm <b>Sửa</b> để chọn phạm vi.</div>
+      <div class="notice warning compact"><b>QC Meta chưa có Mapping vẫn được hiển thị tại đây.</b> Bấm <b>Mapping ngay</b> để gán nhóm sản phẩm, catalog hoặc thư mục Drive; Bot không tự ép sản phẩm khi chưa có Mapping. Với Mapping cũ, nhãn <b>“Chưa chọn thư mục Drive”</b> nghĩa là chưa có nguồn ảnh riêng.</div>
       <div class="toolbar">
         <select id="mappingBusiness" onchange="mappingBusinessFilterChanged()"><option value="">Tất cả BM AIGUKA nhìn thấy</option></select>
         <select id="mappingAccount" onchange="renderMappings()"><option value="">Tất cả tài khoản quảng cáo</option></select>
         <input id="mappingSearch" placeholder="Tìm tên QC, quảng cáo, chiến dịch, nhóm, tài khoản, catalog..." oninput="renderMappings()">
-        <select id="mappingAge" onchange="renderMappings()"><option value="all">Tất cả Mapping</option><option value="current">Có khách trong 45 ngày</option><option value="stale">Không có khách trong 45 ngày</option></select>
+        <select id="mappingState" onchange="renderMappings()"><option value="all">Tất cả QC & Mapping</option><option value="unmapped">Chưa Mapping</option><option value="mapped">Đã Mapping</option></select>
+        <select id="mappingAge" onchange="renderMappings()"><option value="all">Tất cả thời gian</option><option value="current">Có khách trong 45 ngày</option><option value="stale">Không có khách trong 45 ngày</option></select>
       </div>
+      <div id="mappingTableSummary" class="table-summary"></div>
       <div class="table-wrap"><table><thead><tr><th><div class="column-heading"><span>Tên QC / Quảng cáo</span><button id="mappingStatusSort" class="header-sort" type="button" onclick="toggleStatusSort('mapping')" title="Sắp xếp theo trạng thái">Trạng thái ↕</button></div></th><th>Phạm vi sản phẩm</th><th>Thư mục</th><th>Phát sinh gần đây</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
     </div>
   </section>

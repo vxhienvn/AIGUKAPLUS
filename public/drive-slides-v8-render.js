@@ -182,6 +182,7 @@ function renderCurrent() {
     tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(campaign)}</b></div><div class="status-subtitle">${statusDot}<span>${esc(adset)}</span></div><div class="current-ad-name"><span>QC:</span> <b>${esc(adName)}</b></div><div class="small muted">Lần cuối: ${fmtDate(row.last_referral)}</div></td><td><b>${row.customers || 0}</b> khách<div class="small muted">${row.referrals || 0} lượt · ${row.contacts || 0} có liên hệ</div></td><td>${mappingLabel(row.mapping)}</td><td>${folderListHtml(row.mapping)}</td><td><div class="row-actions"><button class="primary" onclick='openMapping(${JSON.stringify(row).replace(/'/g, "&#39;")})'>${row.mapped ? 'Sửa' : 'Mapping ngay'}</button><button onclick='quickTest(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Test</button></div></td>`;
     body.appendChild(tr);
   }
+  renderHeaderStats('current');
 }
 
 function mappingCurrentInfo(adId) { return state.currentAds.find(row => String(row.ad_id) === String(adId)); }
@@ -201,44 +202,71 @@ function hasRecentReferral(row) {
   return Boolean(row?.last_referral) || Number(row?.referrals || 0) > 0;
 }
 
+function mappingInventoryRows(mappings = state.mappings, currentAds = state.currentAds) {
+  const byAd = new Map();
+  const currentByAd = new Map((Array.isArray(currentAds) ? currentAds : []).map(row => [String(row.ad_id || ''), row]));
+  for (const mapping of Array.isArray(mappings) ? mappings : []) {
+    const adId = String(mapping.ad_id || '').trim();
+    if (!adId) continue;
+    byAd.set(adId, { ad_id: adId, mapping, current: currentByAd.get(adId) || null, has_saved_mapping: true });
+  }
+  for (const current of Array.isArray(currentAds) ? currentAds : []) {
+    const adId = String(current.ad_id || '').trim();
+    if (!adId || !current.meta_seen || byAd.has(adId)) continue;
+    byAd.set(adId, { ad_id: adId, mapping: null, current, has_saved_mapping: false });
+  }
+  return [...byAd.values()];
+}
+
 function renderMappings() {
   const query = $('mappingSearch').value.toLocaleLowerCase('vi-VN').trim();
   const mode = $('mappingAge').value;
+  const mappingState = $('mappingState')?.value || 'all';
   const businessId = $('mappingBusiness').value;
   const accountId = $('mappingAccount').value;
-  let rows = state.mappings.filter(mapping => {
-    const current = mappingCurrentInfo(mapping.ad_id);
+  let rows = mappingInventoryRows().filter(entry => {
+    const { mapping, current } = entry;
     const account = mappingAccountContext(mapping, current);
-    const searchable = [mapping.ad_id, mapping.ad_name, mapping.campaign_name, mapping.adset_name, account.accountId, account.accountName, account.businessName, mapping.product_group, mapping.product_item_key, mapping.drive_folder, mapping.notes].join(' ').toLocaleLowerCase('vi-VN');
+    const searchable = [entry.ad_id, current?.ad_title, current?.ad_name, current?.campaign_name, current?.adset_name, mapping?.ad_name, mapping?.campaign_name, mapping?.adset_name, account.accountId, account.accountName, account.businessName, mapping?.product_group, mapping?.product_item_key, mapping?.drive_folder, mapping?.notes].join(' ').toLocaleLowerCase('vi-VN');
     return (!businessId || account.businessId === businessId) &&
       (!accountId || account.accountId === accountId) &&
+      (mappingState === 'all' || (mappingState === 'mapped' ? entry.has_saved_mapping : !entry.has_saved_mapping)) &&
       (!query || searchable.includes(query));
   });
-  rows = rows.filter(mapping => {
-    const current = mappingCurrentInfo(mapping.ad_id);
-    const recent = hasRecentReferral(current);
+  rows = rows.filter(entry => {
+    const recent = hasRecentReferral(entry.current);
     return mode === 'all' || (mode === 'current' ? recent : !recent);
   });
-  sortRowsByStatus(rows, state.mappingStatusSort, mapping => {
-    if (mapping.is_active === false) return 'OFF';
-    return metaEffectiveStatus(mappingCurrentInfo(mapping.ad_id));
+  sortRowsByStatus(rows, state.mappingStatusSort, entry => {
+    if (entry.mapping?.is_active === false) return 'OFF';
+    return metaEffectiveStatus(entry.current);
   });
   updateStatusSortButton('mapping');
+  const savedCount = rows.filter(entry => entry.has_saved_mapping).length;
+  const liveCount = rows.filter(entry => entry.current?.meta_seen).length;
+  const missingCount = rows.length - savedCount;
+  $('mappingTableSummary').textContent = `${rows.length} QC · ${liveCount} còn thấy trên Meta · ${savedCount} đã Mapping · ${missingCount} chưa Mapping`;
   const body = $('mappingBody');
   body.innerHTML = rows.length ? '' : '<tr><td colspan="6" class="empty">Không có Mapping phù hợp.</td></tr>';
-  for (const mapping of rows) {
-    const current = mappingCurrentInfo(mapping.ad_id);
-    const adName = current?.ad_title || current?.ad_name || mapping.ad_name || 'QC chưa có tên';
-    const campaign = mapping.campaign_name || current?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
-    const adset = mapping.adset_name || current?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
-    const effectiveStatus = mapping.is_active === false ? 'OFF' : metaEffectiveStatus(current);
+  for (const entry of rows) {
+    const { mapping, current } = entry;
+    const adName = current?.ad_title || current?.ad_name || mapping?.ad_name || 'QC chưa có tên';
+    const campaign = current?.campaign_name || mapping?.campaign_name || 'Chưa đồng bộ tên chiến dịch';
+    const adset = current?.adset_name || mapping?.adset_name || 'Chưa đồng bộ tên nhóm quảng cáo';
+    const effectiveStatus = mapping?.is_active === false ? 'OFF' : metaEffectiveStatus(current);
     const statusDot = statusDotHtml(effectiveStatus);
-    const scope = mappingScope(mapping);
+    const scope = mapping ? mappingScope(mapping) : { title: 'Chưa Mapping', detail: 'Chưa gán nhóm sản phẩm, catalog hoặc thư mục Drive' };
     const recent = hasRecentReferral(current);
+    const mappingTarget = { ...(current || {}), mapping };
+    const actionLabel = mapping ? 'Sửa' : 'Mapping ngay';
+    const disableButton = mapping?.is_active !== false && mapping
+      ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>`
+      : '';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(adName)}</b></div><div class="status-subtitle"><span>Chiến dịch: ${esc(campaign)}</span></div><div class="status-subtitle"><span>Nhóm: ${esc(adset)}</span></div>${mapping.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td><b>${esc(scope.title)}</b><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${recent ? `<span class="badge ok">Đang có khách</span><div class="small">${current.customers || 0} khách · ${fmtDate(current.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${fmtDate(mapping.updated_at)}</td><td><div class="row-actions"><button onclick='openMapping(${JSON.stringify({ ...current, mapping }).replace(/'/g, "&#39;")})'>Sửa</button>${mapping.is_active !== false ? `<button class="danger" onclick="disableMapping('${esc(mapping.ad_id)}')">Tắt</button>` : ''}</div></td>`;
+    tr.innerHTML = `<td><div class="status-title">${statusDot}<b>${esc(adName)}</b></div><div class="status-subtitle"><span>Chiến dịch: ${esc(campaign)}</span></div><div class="status-subtitle"><span>Nhóm: ${esc(adset)}</span></div>${mapping?.is_active === false ? '<span class="badge bad">Đã tắt</span>' : ''}</td><td>${mapping ? '' : '<span class="badge bad">Chưa Mapping</span>'}<div style="margin-top:5px"><b>${esc(scope.title)}</b></div><div class="small muted">${esc(scope.detail)}</div></td><td>${folderListHtml(mapping)}</td><td>${recent ? `<span class="badge ok">Đang có khách</span><div class="small">${current?.customers || 0} khách · ${fmtDate(current?.last_referral)}</div>` : '<span class="badge warn">Không phát sinh gần đây</span>'}</td><td>${mapping ? fmtDate(mapping.updated_at) : '-'}</td><td><div class="row-actions"><button class="${mapping ? '' : 'primary'}" onclick='openMapping(${JSON.stringify(mappingTarget).replace(/'/g, "&#39;")})'>${actionLabel}</button>${disableButton}</div></td>`;
     body.appendChild(tr);
   }
+  renderHeaderStats('mapping');
 }
 
 function catalogDescendantKeys(key, rows = state.catalogs) {
@@ -571,8 +599,9 @@ function openModal(id) { $(id).classList.add('open'); }
 function closeModal(id) { $(id).classList.remove('open'); }
 
 function openMapping(row) {
-  const mapping = row.mapping || row || {};
-  $('mappingTitle').textContent = mapping.ad_id ? 'Sửa Mapping QC' : 'Thêm Mapping QC';
+  const savedMapping = row?.mapping || state.mappings.find(item => String(item.ad_id || '') === String(row?.ad_id || '')) || null;
+  const mapping = savedMapping || row || {};
+  $('mappingTitle').textContent = savedMapping ? 'Sửa Mapping QC' : 'Thêm Mapping QC';
   $('m_ad_id').value = mapping.ad_id || row.ad_id || '';
   $('m_ad_name').value = mapping.ad_name || row.ad_title || '';
   $('m_account_label').value = mapping.ad_account_name || row.ad_account_name || mapping.ad_account_id || row.ad_account_id || '';
