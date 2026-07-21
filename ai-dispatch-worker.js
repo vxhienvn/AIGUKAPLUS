@@ -1,7 +1,7 @@
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const WORKER_NAME = process.env.AIGUKA_AI_DISPATCH_WORKER_NAME || "aiguka-railway-ai-dispatch";
-const WORKER_VERSION = "profile_preflight_v2_authenticated_brain";
+const WORKER_VERSION = "profile_preflight_v3_ai_follow_up_router";
 const POLL_MS = Math.max(1000, Number(process.env.AIGUKA_AI_DISPATCH_POLL_MS || 1200));
 
 let running = false;
@@ -59,6 +59,7 @@ async function heartbeat(status = "healthy", lastError = null) {
         ai_brain_authenticated: true,
         decision_revision_gate: true,
         truthful_item_health: true,
+        ai_follow_up_router: true,
       },
       last_error: lastError ? String(lastError).slice(0, 500) : null,
       last_seen_at: new Date().toISOString(),
@@ -94,7 +95,9 @@ async function ensureProfile(item) {
 }
 
 async function dispatchBrain(item) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/aiguka-v8-ai-brain`, {
+  const followUp = String(item.requested_by || "") === "follow_up_scan";
+  const functionSlug = followUp ? "aiguka-v8-follow-up-brain" : "aiguka-v8-ai-brain";
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionSlug}`, {
     method: "POST",
     headers: {
       apikey: SERVICE_ROLE_KEY,
@@ -109,7 +112,7 @@ async function dispatchBrain(item) {
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text.slice(0, 500) }; }
   if (!response.ok && response.status !== 409) {
-    throw new Error(data?.error || `AI_BRAIN_HTTP_${response.status}`);
+    throw new Error(data?.error || `${followUp ? "FOLLOW_UP_BRAIN" : "AI_BRAIN"}_HTTP_${response.status}`);
   }
   if (response.ok && data?.ok === false) throw new Error(data?.error || "AI_BRAIN_REPORTED_FAILURE");
   return data;
@@ -131,6 +134,8 @@ async function processItem(item) {
         gender: profile.customer?.gender || null,
         preferred_salutation: profile.customer?.preferred_salutation || null,
         brain_result: result?.ok ?? true,
+        requested_by: item.requested_by || null,
+        follow_up_routed: String(item.requested_by || "") === "follow_up_scan",
       },
     }).catch(() => {});
     return true;
@@ -142,7 +147,7 @@ async function processItem(item) {
       p_worker: WORKER_NAME,
       p_success: false,
       p_error: message,
-      p_details: {},
+      p_details: { requested_by: item.requested_by || null },
     }).catch(() => {});
     return false;
   }
