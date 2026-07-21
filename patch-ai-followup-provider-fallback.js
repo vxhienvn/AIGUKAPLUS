@@ -1,5 +1,22 @@
 import fs from "node:fs";
 
+const providerFile = "ai-follow-up-provider.js";
+let providerSource = fs.readFileSync(providerFile, "utf8");
+const providerMarker = "AIGUKA_GEMINI_FOLLOW_UP_JSON_STABILITY_V1";
+if (!providerSource.includes(providerMarker)) {
+  providerSource = providerSource.replace(
+    'const model = String(provider.model_name || "gemini-2.5-flash").replace(/^models\\//, "");',
+    'const model = "gemini-2.0-flash"; // AIGUKA_GEMINI_FOLLOW_UP_JSON_STABILITY_V1',
+  );
+  providerSource = providerSource.replace(
+    'maxOutputTokens: 500,',
+    'maxOutputTokens: 1200,',
+  );
+  if (!providerSource.includes(providerMarker)) throw new Error("GEMINI_FOLLOW_UP_JSON_PATCH_FAILED");
+  fs.writeFileSync(providerFile, providerSource, "utf8");
+  console.log("[AIGUKA] Stabilized Gemini follow-up JSON output");
+}
+
 const file = "ai-dispatch-worker.js";
 let source = fs.readFileSync(file, "utf8");
 const marker = "AIGUKA_AI_FOLLOW_UP_PROVIDER_FALLBACK_V1";
@@ -23,9 +40,9 @@ if (source.includes(marker)) {
 
   source = source.replace(
     'const WORKER_VERSION = "profile_preflight_v4_direct_ai_follow_up";',
-    'const WORKER_VERSION = "profile_preflight_v5_ai_follow_up_provider_fallback";',
+    'const WORKER_VERSION = "profile_preflight_v6_gemini_json_fallback";',
   );
 
-  fs.writeFileSync(file, source);
+  fs.writeFileSync(file, source, "utf8");
   console.log("[AIGUKA] Installed AI follow-up provider fallback");
 }
