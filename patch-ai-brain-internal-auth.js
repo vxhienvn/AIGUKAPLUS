@@ -26,3 +26,5 @@ if (source.includes(marker)) {
   if (syntax.status !== 0) throw new Error(`AI_BRAIN_INTERNAL_AUTH_SYNTAX:${syntax.stderr || syntax.stdout}`);
   console.log("[AIGUKA] AI Brain internal authentication installed");
 }
+
+await import("./patch-ai-followup-provider-fallback.js");
