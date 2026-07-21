@@ -1,7 +1,9 @@
+import crypto from "node:crypto";
+
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const WORKER_NAME = process.env.AIGUKA_AI_DISPATCH_WORKER_NAME || "aiguka-railway-ai-dispatch";
-const WORKER_VERSION = "profile_preflight_v3_ai_follow_up_router";
+const WORKER_VERSION = "profile_preflight_v4_direct_ai_follow_up";
 const POLL_MS = Math.max(1000, Number(process.env.AIGUKA_AI_DISPATCH_POLL_MS || 1200));
 
 let running = false;
@@ -94,10 +96,96 @@ async function ensureProfile(item) {
   return { attempted: true, ready: Boolean(customer && !placeholderName(customer.display_name)), customer };
 }
 
+function decryptProviderKey(value) {
+  const [ivPart, tagPart, dataPart] = String(value || "").split(".");
+  if (!ivPart || !tagPart || !dataPart) throw new Error("AI_PROVIDER_KEY_FORMAT_INVALID");
+  const encryptionKey = crypto.createHash("sha256")
+    .update(`${SERVICE_ROLE_KEY}|${SUPABASE_URL}|AIGUKA_AI_PROVIDER_KEYS_V1`)
+    .digest();
+  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey, Buffer.from(ivPart, "base64"));
+  decipher.setAuthTag(Buffer.from(tagPart, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(dataPart, "base64")), decipher.final()]).toString("utf8");
+}
+
+function parseFollowUpDecision(payload) {
+  for (const output of payload?.output || []) {
+    if (output?.type !== "function_call" || output?.name !== "submit_follow_up_decision") continue;
+    return JSON.parse(output.arguments || "{}");
+  }
+  throw new Error("MODEL_DID_NOT_SUBMIT_FOLLOW_UP_DECISION");
+}
+
+async function dispatchFollowUp(item) {
+  const prepared = await rpc("v8_prepare_follow_up_ai_request", { p_request_id: item.id });
+  if (!prepared?.ok || prepared?.skipped) return prepared;
+
+  const providers = await rest(
+    `v8_ai_providers?provider_key=eq.${encodeURIComponent(prepared.provider_key || "openai")}&select=provider_key,provider_type,base_url,model_name,api_key_ciphertext,is_enabled&limit=1`,
+  );
+  const provider = providers?.[0];
+  if (!provider?.is_enabled || !provider?.api_key_ciphertext) throw new Error("AI_PROVIDER_NOT_READY");
+  const apiKey = decryptProviderKey(provider.api_key_ciphertext);
+  const base = String(prepared.provider_base_url || provider.base_url || "https://api.openai.com/v1").replace(/\/$/, "");
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      should_reply: { type: "boolean" },
+      final_reply: { type: "string" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      action_type: { type: "string" },
+      should_request_contact: { type: "boolean" },
+      reason: { type: "string" },
+      risk_flags: { type: "array", items: { type: "string" }, maxItems: 8 },
+    },
+    required: ["should_reply", "final_reply", "confidence", "action_type", "should_request_contact", "reason", "risk_flags"],
+  };
+  const response = await fetch(`${base}/responses`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: prepared.model_name || provider.model_name,
+      instructions: "Bạn là AIGUKA Follow-up Brain và là bên duy nhất quyết định có chăm sóc lại khách hay không. Đọc toàn bộ hội thoại. Chỉ nhắn khi khách chưa phản hồi, chưa có SĐT/Zalo và không có Sale chăm mới hơn. Tin tối đa 260 ký tự, tự nhiên, không lặp tin cũ, không gửi lại ảnh, không bịa giá, tồn kho, giao hàng hoặc bảo hành. Dùng đúng preferred_salutation. Có thể hỏi khách cần xem thêm mẫu, kích thước, kiểu dáng hoặc báo giá cụ thể. Chỉ xin SĐT/Zalo khi hợp ngữ cảnh. Nếu không phù hợp thì should_reply=false. Bắt buộc gọi submit_follow_up_decision.",
+      tools: [{ type: "function", name: "submit_follow_up_decision", strict: true, description: "Nộp quyết định chăm sóc lại.", parameters: schema }],
+      tool_choice: "required",
+      parallel_tool_calls: false,
+      input: [{ role: "user", content: [{ type: "input_text", text: JSON.stringify({
+        task: "scheduled_follow_up_after_silence",
+        trigger: prepared.details,
+        customer: prepared.customer,
+        conversation_state: prepared.conversation_state,
+        ai_memory: prepared.memory,
+        conversation: prepared.conversation,
+      }) }] }],
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const rawText = await response.text();
+  let payload;
+  try { payload = rawText ? JSON.parse(rawText) : {}; } catch { payload = { raw: rawText.slice(0, 500) }; }
+  if (!response.ok || payload?.error) throw new Error(payload?.error?.message || `OPENAI_FOLLOW_UP_HTTP_${response.status}`);
+  const decision = parseFollowUpDecision(payload);
+  return rpc("v8_complete_follow_up_ai_request", {
+    p_request_id: item.id,
+    p_decision: decision,
+    p_model_name: prepared.model_name || provider.model_name,
+    p_response_id: payload.id || null,
+  });
+}
+
 async function dispatchBrain(item) {
-  const followUp = String(item.requested_by || "") === "follow_up_scan";
-  const functionSlug = followUp ? "aiguka-v8-follow-up-brain" : "aiguka-v8-ai-brain";
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionSlug}`, {
+  if (String(item.requested_by || "") === "follow_up_scan") {
+    try {
+      return await dispatchFollowUp(item);
+    } catch (error) {
+      await rpc("v8_fail_follow_up_ai_request", {
+        p_request_id: item.id,
+        p_error: String(error?.message || error).slice(0, 800),
+      }).catch(() => {});
+      throw error;
+    }
+  }
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/aiguka-v8-ai-brain`, {
     method: "POST",
     headers: {
       apikey: SERVICE_ROLE_KEY,
@@ -111,9 +199,7 @@ async function dispatchBrain(item) {
   const text = await response.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text.slice(0, 500) }; }
-  if (!response.ok && response.status !== 409) {
-    throw new Error(data?.error || `${followUp ? "FOLLOW_UP_BRAIN" : "AI_BRAIN"}_HTTP_${response.status}`);
-  }
+  if (!response.ok && response.status !== 409) throw new Error(data?.error || `AI_BRAIN_HTTP_${response.status}`);
   if (response.ok && data?.ok === false) throw new Error(data?.error || "AI_BRAIN_REPORTED_FAILURE");
   return data;
 }
