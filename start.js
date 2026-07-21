@@ -60,6 +60,7 @@ await import("./patch-drive-folder-tree-hierarchy.js");
 await import("./patch-catalog-key-rename.js");
 await import("./patch-slide-generic-carousel.js");
 await import("./seed-tong-hop-context.js");
+await import("./patch-mapping-meta-midnight-delivery.js");
 await import("./patch-server.js");
 await import("./server-fixed.js");
 await import("./patch-outbound-human-takeover.js");
