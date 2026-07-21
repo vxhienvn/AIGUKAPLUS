@@ -49,7 +49,7 @@ function patchRender() {
   const parentRows = catalogTreeRows(state.allCatalogs.filter(row =>
     !excluded.has(String(row.catalog_key)) && (row.is_active !== false || String(row.catalog_key) === String(catalog.parent_key || ''))
   ));
-  fillSelect($('c_parent'), parentRows, 'catalog_key', row => \`${'— '.repeat(row._depth)}\${row.catalog_name} — \${row.catalog_key}\`, 'Không có — catalog cấp cao nhất');
+  fillSelect($('c_parent'), parentRows, 'catalog_key', row => \`\${'— '.repeat(row._depth)}\${row.catalog_name} — \${row.catalog_key}\`, 'Không có — catalog cấp cao nhất');
   $('catalogTitle').textContent = isNew ? 'Thêm Catalog' : 'Sửa Catalog';
   $('c_is_new').value = isNew ? '1' : '0';
   if ($('c_original_key')) $('c_original_key').value = key;
