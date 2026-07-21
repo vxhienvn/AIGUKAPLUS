@@ -81,7 +81,7 @@ Key behavior now:
 
 RPC: `v8_regression_test_ai_slide_exact_10()`
 
-Latest result:
+Final result after Drive reconciliation:
 
 ```json
 {
@@ -93,7 +93,7 @@ Latest result:
   "stage_result": {
     "decision_authority": "ai",
     "slide_catalog": "guong_tu",
-    "slide_available_images": 30,
+    "slide_available_images": 42,
     "slide_target_images": 10
   }
 }
@@ -109,13 +109,15 @@ Direct Google Drive inspection found:
 - `GƯƠNG`: 10 direct image files.
 - Total direct images in the two selected folders: 42.
 
-At audit time Supabase had 30 verified `guong_tu` assets because 12 files were uploaded after the last completed sync. A sync request was queued. The previous RPC only marked `sync_status=requested`; no background consumer handled it.
+Supabase originally had 30 verified `guong_tu` assets because 12 files had been uploaded after the previous completed sync. The 12 missing files were reconciled and delivery-verified. Supabase now has **42 active and 42 verified** `guong_tu` assets.
 
-Repository fix:
+The old `v8_request_drive_sync` RPC only marked `sync_status=requested`; it had no background consumer. Repository fix:
 
 - Added `drive-sync-request-worker.js`.
 - Started it from `start.js`.
 - It claims requested mappings, calls the existing recursive `/api/slide-manager/drive/sync` route, writes success/error, and reports a worker heartbeat.
+- Production heartbeat is healthy (`requested_mapping_sync_v1`).
+- The `guong_tu` mapping finished successfully with no sync error.
 
 ## Pipeline trace
 
