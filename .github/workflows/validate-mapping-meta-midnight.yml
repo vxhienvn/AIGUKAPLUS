@@ -1,0 +1,27 @@
+name: Validate Mapping Meta midnight patch
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check patch and wiring
+        run: node --test tests/mapping-meta-midnight-patch.test.js
+      - name: Apply patch to Mapping Center source
+        run: |
+          cp src/routes/mappingCenterRoutes.js /tmp/mappingCenterRoutes.js
+          node patch-mapping-meta-midnight-delivery.js
+          node --check src/routes/mappingCenterRoutes.js
+          grep -q 'date_preset=yesterday' src/routes/mappingCenterRoutes.js
+          grep -q 'account_has_recent_delivery' src/routes/mappingCenterRoutes.js
+          grep -q 'previous_day_midnight_grace' src/routes/mappingCenterRoutes.js
+          mv /tmp/mappingCenterRoutes.js src/routes/mappingCenterRoutes.js
