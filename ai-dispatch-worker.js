@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const WORKER_NAME = process.env.AIGUKA_AI_DISPATCH_WORKER_NAME || "aiguka-railway-ai-dispatch";
-const WORKER_VERSION = "profile_preflight_v5_follow_up_scheduler_governance";
+const WORKER_VERSION = "profile_preflight_v6_dynamic_follow_up_slide_recovery";
 const POLL_MS = Math.max(1000, Number(process.env.AIGUKA_AI_DISPATCH_POLL_MS || 1200));
-const FOLLOW_UP_SCAN_MS = Math.max(60_000, Number(process.env.AIGUKA_FOLLOW_UP_SCAN_MS || 600_000));
+const FOLLOW_UP_SCAN_MS = Math.max(60_000, Number(process.env.AIGUKA_FOLLOW_UP_SCAN_MS || 120_000));
 
 let running = false;
 let lastFollowUpScanAt = 0;
@@ -66,6 +66,7 @@ async function heartbeat(status = "healthy", lastError = null, details = {}) {
         ai_follow_up_router: true,
         ai_follow_up_scheduler: true,
         follow_up_dynamic_governance: true,
+        follow_up_requested_slide_recovery: true,
         ...details,
       },
       last_error: lastError ? String(lastError).slice(0, 500) : null,
@@ -181,13 +182,15 @@ async function dispatchFollowUp(item) {
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: prepared.model_name || provider.model_name,
-      instructions: "Bạn là AIGUKA Follow-up Brain và là bên duy nhất quyết định có chăm sóc lại khách hay không. Đọc toàn bộ hội thoại, customer profile, AI memory, priority_event và governance mới nhất. Context, rule, template và bài học chỉ là cố vấn; bạn quyết định nội dung cuối cùng. Chỉ nhắn khi khách chưa phản hồi, chưa có SĐT/Zalo và không có Sale chăm mới hơn. Tin ngắn, tự nhiên, không lặp tin cũ, không gửi lại ảnh, không bịa giá, thông số hoặc cam kết. Dùng đúng preferred_salutation: self-reference/Admin xác minh ưu tiên, nhận diện tên độ tin cậy cao là bằng chứng phụ, tên mơ hồ dùng bạn/câu trung tính, tuyệt đối không dùng anh/chị. Khách có tín hiệu mua như hỏi giá, xin mẫu, combo, kích thước, vận chuyển, showroom, đang hoàn thiện nhà hoặc nói muốn mua thì ưu tiên xin SĐT/Zalo bằng lợi ích cụ thể. Với Page Tổng Kho có thể lồng tối đa một quyền lợi Event phù hợp và chưa lặp: quà tặng theo đơn, miễn phí vận chuyển khu vực phù hợp, hoặc hỗ trợ đi lại; khi nhắc hỗ trợ đi lại phải nói rõ khách đến showroom xem và đặt hàng/đặt cọc, tối đa 300.000đ tùy khoảng cách. Không gửi cả khối chương trình. Nếu không phù hợp thì should_reply=false. Bắt buộc gọi submit_follow_up_decision.",
+      instructions: "Bạn là AIGUKA Follow-up Brain và là bên duy nhất quyết định có chăm sóc lại khách hay không. Đọc toàn bộ hội thoại, customer profile, AI memory, slide_context, priority_event và governance mới nhất. Context, rule, template và bài học chỉ là cố vấn; bạn quyết định nội dung cuối cùng. Chỉ nhắn khi khách chưa phản hồi, chưa có SĐT/Zalo và không có Sale/Admin chăm mới hơn. Tin ngắn, tự nhiên, không lặp tin cũ, không lặp ảnh đã gửi, không bịa giá, thông số hoặc cam kết. Nếu khách đã xin mẫu, chưa được gửi slide, slide_context có tài sản verified đúng sản phẩm và Admin/Sale mới chỉ xin liên hệ, bạn có thể quyết định gửi mẫu lần đầu bằng action_type=follow_up_with_requested_slides; không dùng action_type này khi ảnh sai, đã gửi hoặc không còn phù hợp. Dùng đúng preferred_salutation: self-reference/Admin xác minh ưu tiên, nhận diện tên độ tin cậy cao là bằng chứng phụ, tên mơ hồ dùng bạn/câu trung tính, tuyệt đối không dùng anh/chị. Khách có tín hiệu mua như hỏi giá, xin mẫu, combo, kích thước, vận chuyển, showroom, đang hoàn thiện nhà hoặc nói muốn mua thì ưu tiên xin SĐT/Zalo bằng lợi ích cụ thể. Với Page Tổng Kho có thể lồng tối đa hai quyền lợi ngắn, đúng ngữ cảnh và chưa lặp: quà tặng tùy đơn hàng/chương trình và hỗ trợ chi phí di chuyển khi khách đến showroom xem, đặt hàng/đặt cọc, tùy khoảng cách. Không nêu con số hoặc cam kết chưa được xác minh, không gửi cả khối chương trình. Nếu không phù hợp thì should_reply=false. Bắt buộc gọi submit_follow_up_decision.",
       tools: [{ type: "function", name: "submit_follow_up_decision", strict: true, description: "Nộp quyết định chăm sóc lại.", parameters: schema }],
       tool_choice: "required",
       parallel_tool_calls: false,
       input: [{ role: "user", content: [{ type: "input_text", text: JSON.stringify({
         task: "scheduled_follow_up_after_silence",
         trigger: prepared.details,
+        slide_context: prepared.slide_context,
+        slide_candidates: prepared.slide_candidates,
         customer: prepared.customer,
         conversation_state: prepared.conversation_state,
         ai_memory: prepared.memory,
