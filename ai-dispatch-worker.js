@@ -3,10 +3,12 @@ import crypto from "node:crypto";
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const WORKER_NAME = process.env.AIGUKA_AI_DISPATCH_WORKER_NAME || "aiguka-railway-ai-dispatch";
-const WORKER_VERSION = "profile_preflight_v4_direct_ai_follow_up";
+const WORKER_VERSION = "profile_preflight_v5_follow_up_scheduler_governance";
 const POLL_MS = Math.max(1000, Number(process.env.AIGUKA_AI_DISPATCH_POLL_MS || 1200));
+const FOLLOW_UP_SCAN_MS = Math.max(60_000, Number(process.env.AIGUKA_FOLLOW_UP_SCAN_MS || 600_000));
 
 let running = false;
+let lastFollowUpScanAt = 0;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const placeholderName = (value) => {
   const name = String(value || "").trim();
@@ -45,7 +47,7 @@ async function request(path, options = {}) {
 const rpc = (name, body = {}) => request(`/rest/v1/rpc/${name}`, { method: "POST", body });
 const rest = (path, options = {}) => request(`/rest/v1/${path}`, options);
 
-async function heartbeat(status = "healthy", lastError = null) {
+async function heartbeat(status = "healthy", lastError = null, details = {}) {
   await rest("v8_worker_heartbeats?on_conflict=worker_name", {
     method: "POST",
     prefer: "resolution=merge-duplicates,return=minimal",
@@ -62,6 +64,9 @@ async function heartbeat(status = "healthy", lastError = null) {
         decision_revision_gate: true,
         truthful_item_health: true,
         ai_follow_up_router: true,
+        ai_follow_up_scheduler: true,
+        follow_up_dynamic_governance: true,
+        ...details,
       },
       last_error: lastError ? String(lastError).slice(0, 500) : null,
       last_seen_at: new Date().toISOString(),
@@ -115,13 +120,44 @@ function parseFollowUpDecision(payload) {
   throw new Error("MODEL_DID_NOT_SUBMIT_FOLLOW_UP_DECISION");
 }
 
+async function loadFollowUpGovernance(pageId) {
+  const [contexts, branches, lessons] = await Promise.all([
+    rest("v8_ai_contexts?select=context_key,context_name,page_id,content,priority,metadata&is_active=eq.true&usage_mode=eq.PRODUCTION&order=priority.asc&limit=20"),
+    rest("v8_prompt_branches?select=branch_key,branch_name,instruction_text,conditions,priority&is_active=eq.true&order=priority.asc&limit=40"),
+    rest("v8_behavior_learning_cases?select=customer_message,improved_reply,context_summary,learning_scope,learning_type,reason,metadata,updated_at&status=in.(approved,applied)&order=updated_at.desc&limit=20"),
+  ]);
+  return {
+    role: "advisory_reference_ai_decides",
+    contexts: (contexts || []).filter((x) => !x.page_id || String(x.page_id) === String(pageId)),
+    prompt_guidance: branches || [],
+    recent_approved_lessons: lessons || [],
+  };
+}
+
+async function scheduleFollowUpsIfDue() {
+  const now = Date.now();
+  if (now - lastFollowUpScanAt < FOLLOW_UP_SCAN_MS) return null;
+  lastFollowUpScanAt = now;
+  try {
+    return await rpc("v8_create_follow_up_tasks", {
+      p_limit: 200,
+      p_dry_run: false,
+      p_requested_by: "railway_follow_up_scheduler",
+    });
+  } catch (error) {
+    lastFollowUpScanAt = 0;
+    throw error;
+  }
+}
+
 async function dispatchFollowUp(item) {
   const prepared = await rpc("v8_prepare_follow_up_ai_request", { p_request_id: item.id });
   if (!prepared?.ok || prepared?.skipped) return prepared;
 
-  const providers = await rest(
-    `v8_ai_providers?provider_key=eq.${encodeURIComponent(prepared.provider_key || "openai")}&select=provider_key,provider_type,base_url,model_name,api_key_ciphertext,is_enabled&limit=1`,
-  );
+  const [providers, governance] = await Promise.all([
+    rest(`v8_ai_providers?provider_key=eq.${encodeURIComponent(prepared.provider_key || "openai")}&select=provider_key,provider_type,base_url,model_name,api_key_ciphertext,is_enabled&limit=1`),
+    loadFollowUpGovernance(prepared.page_id),
+  ]);
   const provider = providers?.[0];
   if (!provider?.is_enabled || !provider?.api_key_ciphertext) throw new Error("AI_PROVIDER_NOT_READY");
   const apiKey = decryptProviderKey(provider.api_key_ciphertext);
@@ -145,7 +181,7 @@ async function dispatchFollowUp(item) {
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: prepared.model_name || provider.model_name,
-      instructions: "Bạn là AIGUKA Follow-up Brain và là bên duy nhất quyết định có chăm sóc lại khách hay không. Đọc toàn bộ hội thoại. Chỉ nhắn khi khách chưa phản hồi, chưa có SĐT/Zalo và không có Sale chăm mới hơn. Tin tối đa 260 ký tự, tự nhiên, không lặp tin cũ, không gửi lại ảnh, không bịa giá, tồn kho, giao hàng hoặc bảo hành. Dùng đúng preferred_salutation. Có thể hỏi khách cần xem thêm mẫu, kích thước, kiểu dáng hoặc báo giá cụ thể. Chỉ xin SĐT/Zalo khi hợp ngữ cảnh. Nếu không phù hợp thì should_reply=false. Bắt buộc gọi submit_follow_up_decision.",
+      instructions: "Bạn là AIGUKA Follow-up Brain và là bên duy nhất quyết định có chăm sóc lại khách hay không. Đọc toàn bộ hội thoại, customer profile, AI memory, priority_event và governance mới nhất. Context, rule, template và bài học chỉ là cố vấn; bạn quyết định nội dung cuối cùng. Chỉ nhắn khi khách chưa phản hồi, chưa có SĐT/Zalo và không có Sale chăm mới hơn. Tin ngắn, tự nhiên, không lặp tin cũ, không gửi lại ảnh, không bịa giá, thông số hoặc cam kết. Dùng đúng preferred_salutation: self-reference/Admin xác minh ưu tiên, nhận diện tên độ tin cậy cao là bằng chứng phụ, tên mơ hồ dùng bạn/câu trung tính, tuyệt đối không dùng anh/chị. Khách có tín hiệu mua như hỏi giá, xin mẫu, combo, kích thước, vận chuyển, showroom, đang hoàn thiện nhà hoặc nói muốn mua thì ưu tiên xin SĐT/Zalo bằng lợi ích cụ thể. Với Page Tổng Kho có thể lồng tối đa một quyền lợi Event phù hợp và chưa lặp: quà tặng theo đơn, miễn phí vận chuyển khu vực phù hợp, hoặc hỗ trợ đi lại; khi nhắc hỗ trợ đi lại phải nói rõ khách đến showroom xem và đặt hàng/đặt cọc, tối đa 300.000đ tùy khoảng cách. Không gửi cả khối chương trình. Nếu không phù hợp thì should_reply=false. Bắt buộc gọi submit_follow_up_decision.",
       tools: [{ type: "function", name: "submit_follow_up_decision", strict: true, description: "Nộp quyết định chăm sóc lại.", parameters: schema }],
       tool_choice: "required",
       parallel_tool_calls: false,
@@ -156,6 +192,7 @@ async function dispatchFollowUp(item) {
         conversation_state: prepared.conversation_state,
         ai_memory: prepared.memory,
         conversation: prepared.conversation,
+        governance,
       }) }] }],
     }),
     signal: AbortSignal.timeout(60_000),
@@ -242,7 +279,14 @@ async function processItem(item) {
 async function poll() {
   if (!configured() || running) return;
   running = true;
+  let followUpScan = null;
   try {
+    try {
+      followUpScan = await scheduleFollowUpsIfDue();
+    } catch (error) {
+      console.error("[AIGUKA follow-up scheduler]", String(error?.message || error));
+    }
+
     const claimed = await rpc("v8_claim_ai_dispatch_batch", {
       p_worker: WORKER_NAME,
       p_batch_size: 5,
@@ -252,10 +296,15 @@ async function poll() {
       const ok = await processItem(item);
       if (!ok) failures += 1;
     }
+    const scanDetails = followUpScan ? {
+      follow_up_last_scan_at: new Date().toISOString(),
+      follow_up_candidates: Number(followUpScan.candidates || 0),
+      follow_up_requests_created: Number(followUpScan.ai_requests_created || 0),
+    } : {};
     if (failures > 0) {
-      await heartbeat("degraded", `${failures}/${claimed.length} AI dispatch item(s) failed`);
+      await heartbeat("degraded", `${failures}/${claimed.length} AI dispatch item(s) failed`, scanDetails);
     } else {
-      await heartbeat("healthy", null);
+      await heartbeat("healthy", null, scanDetails);
     }
   } catch (error) {
     const message = String(error?.message || error);
@@ -276,7 +325,7 @@ export async function startAiDispatchWorker() {
   await heartbeat("starting", null).catch(() => {});
   await poll();
   setInterval(() => { poll().catch(() => {}); }, POLL_MS).unref?.();
-  console.log(`[AIGUKA AI dispatch] Worker ${WORKER_NAME} started; poll ${POLL_MS}ms`);
+  console.log(`[AIGUKA AI dispatch] Worker ${WORKER_NAME} started; poll ${POLL_MS}ms; follow-up scan ${FOLLOW_UP_SCAN_MS}ms`);
 }
 
 await startAiDispatchWorker();
