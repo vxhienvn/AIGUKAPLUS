@@ -19,36 +19,59 @@ jobs:
             'https://ezygfpeeqbbirdeazene.supabase.co/functions/v1/aiguka-diagnostic-dashboard-source' \
             -o v7-dashboard-stable.js
           node --check v7-dashboard-stable.js
-      - name: Apply known-good dashboard patches
-        run: |
-          node patch-v7-report-accuracy.js
-          node patch-v7-product-detection.js
-          node patch-v7-navigation.js
-          node patch-v7-pancake-toggle.js
-          node patch-v7-lead-filters.js
-          node patch-v7-daily-grouped.js
-          node patch-v7-daily-staff-history.js
-          node patch-v7-daily-layout-sample.js
-          node patch-v7-filter-final.js
-          node patch-v7-daily-staff-aligned.js
-          node patch-v7-daily-runtime-self-contained.js
-          node patch-v7-leads-meta-primary.js
-          node patch-v7-leads-referral-source.js
-          node patch-v7-pancake-tag-completeness.js
-          node patch-v7-pancake-tag-final.js
-          node patch-v7-daily-final-anchor-fix.js
-          node patch-v7-daily-final.js
-          node patch-v7-daily-runtime-fallback.js
-          node patch-v7-lead-table-v4.js
-          node patch-v7-lead-filter-logical.js
-          node patch-v7-lead-contact-ui.js
-          node patch-v7-null-safety.js
-          node patch-v7-runtime-integrity.js
-          node patch-v7-lead-meta-insights-truth.js
-          node patch-v7-lead-reel-old-ad-attribution.js
-          node patch-v7-lead-reel-reply-guard.js
-          node --check v7-dashboard-stable.js
-      - name: Apply split Lead performance
+      - name: Report accuracy
+        run: node patch-v7-report-accuracy.js
+      - name: Product detection
+        run: node patch-v7-product-detection.js
+      - name: Navigation
+        run: node patch-v7-navigation.js
+      - name: Pancake toggle
+        run: node patch-v7-pancake-toggle.js
+      - name: Lead filters
+        run: node patch-v7-lead-filters.js
+      - name: Daily grouped
+        run: node patch-v7-daily-grouped.js
+      - name: Daily staff history
+        run: node patch-v7-daily-staff-history.js
+      - name: Daily layout sample
+        run: node patch-v7-daily-layout-sample.js
+      - name: Filter final
+        run: node patch-v7-filter-final.js
+      - name: Daily staff aligned
+        run: node patch-v7-daily-staff-aligned.js
+      - name: Daily runtime self contained
+        run: node patch-v7-daily-runtime-self-contained.js
+      - name: Leads Meta primary
+        run: node patch-v7-leads-meta-primary.js
+      - name: Leads referral source
+        run: node patch-v7-leads-referral-source.js
+      - name: Pancake tag completeness
+        run: node patch-v7-pancake-tag-completeness.js
+      - name: Pancake tag final
+        run: node patch-v7-pancake-tag-final.js
+      - name: Daily final anchor fix
+        run: node patch-v7-daily-final-anchor-fix.js
+      - name: Daily final
+        run: node patch-v7-daily-final.js
+      - name: Daily runtime fallback
+        run: node patch-v7-daily-runtime-fallback.js
+      - name: Lead table v4
+        run: node patch-v7-lead-table-v4.js
+      - name: Lead filter logical
+        run: node patch-v7-lead-filter-logical.js
+      - name: Lead contact UI
+        run: node patch-v7-lead-contact-ui.js
+      - name: Null safety
+        run: node patch-v7-null-safety.js
+      - name: Runtime integrity
+        run: node patch-v7-runtime-integrity.js
+      - name: Lead Meta insights truth
+        run: node patch-v7-lead-meta-insights-truth.js
+      - name: Old ad attribution
+        run: node patch-v7-lead-reel-old-ad-attribution.js
+      - name: Reel reply guard
+        run: node patch-v7-lead-reel-reply-guard.js
+      - name: Split Lead performance
         run: node patch-v7-split-leads-ad-performance.js
       - name: Check generated dashboard
         run: node --check v7-dashboard-stable.js
