@@ -12,58 +12,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Create dashboard fixture
+      - name: Fetch production dashboard source
         run: |
-          cat > v7-dashboard-stable.js <<'EOF'
-          const cache = {};
-          const GRAPH_VERSION = 'v23.0';
-          const act = value => String(value || '');
-          const esc = value => String(value || '');
-          const csv = value => String(value || '');
-          const dateKey = value => String(value || '2026-07-17').slice(0,10);
-          const money = value => String(value || '0');
-          async function fetchJson(){ return {}; }
-          function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
-          function filterForm(){ return ''; }
-          function layout(_title,body,active='dashboard'){
-            const nav=(href,label,key)=>`<a class="${active===key?'active':''}" href="${href}">${label}</a>`;
-            return `<html><head><style>#tap{display:none}</style></head><body>${nav('/dashboard','Dashboard','dashboard')}${nav('/daily-report','▤ Báo cáo ngày','daily')}${nav('/leads','☏ Khách hàng / Lead','leads')}<hr>${body}</body></html>`;
-          }
-          async function getAccounts(){ return []; }
-          async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
-          async function fetchPancake(){ return { rows: [], error: null }; }
-          async function fetchDaily(){ return { rows: [], errors: [], totalSpend: 0, totalMessages: 0 }; }
-          function mapLeads(){ return []; }
-          async function dashboardPage(req,res) {}
-          async function dailyPage(req,res) {}
-          async function leadsPage(req,res) {}
-          export function installStableV7Dashboard(app) {
-            app.get('/daily-report',(req,res)=>dailyPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
-            app.get('/leads',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
-            app.get('/customers',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
-            app.get('/export',async(req,res)=>res.send(''));
-          }
-          EOF
-      - name: Apply daily grouped
-        run: node patch-v7-daily-grouped.js
-      - name: Apply daily staff aligned
-        run: node patch-v7-daily-staff-aligned.js
-      - name: Apply daily runtime self contained
-        run: node patch-v7-daily-runtime-self-contained.js
-      - name: Apply Meta primary leads
-        run: node patch-v7-leads-meta-primary.js
-      - name: Apply referral source
-        run: node patch-v7-leads-referral-source.js
-      - name: Apply null safety
-        run: node patch-v7-null-safety.js
-      - name: Apply runtime integrity
-        run: node patch-v7-runtime-integrity.js
-      - name: Apply Meta insights truth
-        run: node patch-v7-lead-meta-insights-truth.js
-      - name: Apply old ad attribution
-        run: node patch-v7-lead-reel-old-ad-attribution.js
-      - name: Apply Reel reply guard
-        run: node patch-v7-lead-reel-reply-guard.js
+          curl --fail --silent --show-error \
+            -H 'x-aiguka-diagnostic: AIGUKA_DIAG_20260724_SPLIT_LEADS_9f31' \
+            'https://ezygfpeeqbbirdeazene.supabase.co/functions/v1/aiguka-diagnostic-dashboard-source' \
+            -o v7-dashboard-stable.js
+          node --check v7-dashboard-stable.js
+      - name: Apply known-good dashboard patches
+        run: |
+          node patch-v7-report-accuracy.js
+          node patch-v7-product-detection.js
+          node patch-v7-navigation.js
+          node patch-v7-pancake-toggle.js
+          node patch-v7-lead-filters.js
+          node patch-v7-daily-grouped.js
+          node patch-v7-daily-staff-history.js
+          node patch-v7-daily-layout-sample.js
+          node patch-v7-filter-final.js
+          node patch-v7-daily-staff-aligned.js
+          node patch-v7-daily-runtime-self-contained.js
+          node patch-v7-leads-meta-primary.js
+          node patch-v7-leads-referral-source.js
+          node patch-v7-pancake-tag-completeness.js
+          node patch-v7-pancake-tag-final.js
+          node patch-v7-daily-final-anchor-fix.js
+          node patch-v7-daily-final.js
+          node patch-v7-daily-runtime-fallback.js
+          node patch-v7-lead-table-v4.js
+          node patch-v7-lead-filter-logical.js
+          node patch-v7-lead-contact-ui.js
+          node patch-v7-null-safety.js
+          node patch-v7-runtime-integrity.js
+          node patch-v7-lead-meta-insights-truth.js
+          node patch-v7-lead-reel-old-ad-attribution.js
+          node patch-v7-lead-reel-reply-guard.js
+          node --check v7-dashboard-stable.js
       - name: Apply split Lead performance
         run: node patch-v7-split-leads-ad-performance.js
       - name: Check generated dashboard
