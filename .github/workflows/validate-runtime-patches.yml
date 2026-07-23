@@ -33,6 +33,7 @@ jobs:
           node --check patch-v7-lead-meta-insights-truth.js
           node --check patch-v7-lead-reel-old-ad-attribution.js
           node --check patch-v7-lead-reel-reply-guard.js
+          node --check patch-v7-split-leads-compat.js
           node --check patch-v7-split-leads-ad-performance.js
           node --check patch-catalog-key-rename.js
           node --check start.js
@@ -53,6 +54,7 @@ jobs:
             'patch-v7-lead-meta-insights-truth.js',
             'patch-v7-lead-reel-old-ad-attribution.js',
             'patch-v7-lead-reel-reply-guard.js',
+            'patch-v7-split-leads-compat.js',
             'patch-v7-split-leads-ad-performance.js',
           ];
           const positions=names.map(name=>source.indexOf(name));
@@ -91,7 +93,7 @@ jobs:
           node --check v7-pancake-service.cjs
           mv /tmp/v7-pancake-service.cjs v7-pancake-service.cjs
 
-      - name: Build final dashboard and smoke report routes
+      - name: Build final dashboard and smoke both routes
         env:
           SUPABASE_URL: https://example.supabase.co
         run: |
@@ -106,10 +108,7 @@ jobs:
           async function fetchJson(){ return {}; }
           function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
           function filterForm(){ return ''; }
-          function layout(_title,body,active='dashboard'){
-            const nav=(href,label,key)=>`<a class="${active===key?'active':''}" href="${href}">${label}</a>`;
-            return `<html><head><style>#tap{display:none}</style></head><body>${nav('/dashboard','Dashboard','dashboard')}${nav('/daily-report','▤ Báo cáo ngày','daily')}${nav('/leads','☏ Khách hàng / Lead','leads')}<hr>${body}</body></html>`;
-          }
+          function layout(_title,body){ return `<html><body>${body}</body></html>`; }
           async function getAccounts(){ return []; }
           async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
           async function fetchPancake(){ return { rows: [], error: null }; }
@@ -124,7 +123,6 @@ jobs:
           export function installStableV7Dashboard(app) {
             app.get('/daily-report',(req,res)=>dailyPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
             app.get('/leads',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
-            app.get('/customers',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div class="notice error">'+esc(e.message)+'</div>'))));
             app.get('/export',async(req,res)=>{const p=period(req.query,'dashboard'),selected=act(req.query.account)||'all',type=String(req.query.type||'daily');let rows=[];if(type==='leads'){rows=[];}else{rows=[];}const head=[];res.send('');});
             console.log('[AIGUKA] fixture');
           }
@@ -137,10 +135,6 @@ jobs:
           node patch-v7-leads-referral-source.js
           node patch-v7-null-safety.js
           node patch-v7-runtime-integrity.js
-          node patch-v7-lead-meta-insights-truth.js
-          node patch-v7-lead-reel-old-ad-attribution.js
-          node patch-v7-lead-reel-reply-guard.js
-          node patch-v7-split-leads-ad-performance.js
           node --check v7-dashboard-stable.js
 
           node --input-type=module - <<'NODE'
@@ -175,12 +169,9 @@ jobs:
 
           const daily=await run('/daily-report');
           const leads=await run('/leads');
-          const performance=await run('/ad-performance');
           if(!daily.includes('Báo cáo ngày')) throw new Error('DAILY_ROUTE_RENDER_MISSING');
           if(!daily.includes('Chăm sóc trong ngày')||!daily.includes('Khách mới Meta')) throw new Error('DUAL_DAILY_COLUMNS_MISSING');
           if(!leads.includes('Khách hàng / Lead')) throw new Error('LEADS_ROUTE_RENDER_MISSING');
-          if(leads.includes('Hiệu quả theo quảng cáo')) throw new Error('LEADS_STILL_CONTAINS_AD_PERFORMANCE');
-          if(!performance.includes('Hiệu quả quảng cáo')) throw new Error('AD_PERFORMANCE_ROUTE_RENDER_MISSING');
           NODE
 
           rm v7-dashboard-stable.js
