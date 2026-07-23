@@ -25,7 +25,18 @@ jobs:
           const fix=start.indexOf('patch-v7-lead-filter-status-fix.js');
           if(split<0||fix<=split) throw new Error('INVALID_LEAD_FILTER_STATUS_PATCH_ORDER');
           const patch=fs.readFileSync('patch-v7-lead-filter-status-fix.js','utf8');
-          for(const token of ['performance.rows=await hydrateLeadEntityStatuses','entityStatusDot','clearActiveFilters','pageshow']){
+          for(const token of [
+            'AIGUKA_LEAD_FILTER_STATUS_FIX_V2',
+            'performance.rows=await hydrateLeadEntityStatuses',
+            'entityStatusDot',
+            'return entityStatusDot(status)',
+            "const kind=status.kind==='on'?'on':'off'",
+            'clearActiveFilters',
+            'pageshow'
+          ]){
             if(!patch.includes(token)) throw new Error('MISSING_FIX_TOKEN:'+token);
+          }
+          if(patch.includes("return (title?'<b>'+esc(title)+'</b>':'')+entityStatusBadge(status)")){
+            throw new Error('TEXT_STATUS_BADGE_STILL_RENDERED_AFTER_NAME');
           }
           NODE
