@@ -45,6 +45,9 @@ await import("./patch-v7-lead-filter-logical.js");
 await import("./patch-v7-lead-contact-ui.js");
 await import("./patch-v7-null-safety.js");
 await import("./patch-v7-runtime-integrity.js");
+await import("./patch-v7-lead-meta-insights-truth.js");
+await import("./patch-v7-lead-reel-old-ad-attribution.js");
+await import("./patch-v7-lead-reel-reply-guard.js");
 
 await import("./patch-learning-client.js");
 await import("./patch-bot-page-mode-save.js");
