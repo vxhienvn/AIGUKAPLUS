@@ -17,13 +17,16 @@ jobs:
       - name: Check syntax and startup order
         run: |
           node --check patch-v7-lead-filter-status-fix.js
+          node --check patch-v7-mobile-filter-reset.js
           node --check start.js
           node - <<'NODE'
           const fs=require('fs');
           const start=fs.readFileSync('start.js','utf8');
           const split=start.indexOf('patch-v7-split-leads-ad-performance.js');
           const fix=start.indexOf('patch-v7-lead-filter-status-fix.js');
+          const mobile=start.indexOf('patch-v7-mobile-filter-reset.js');
           if(split<0||fix<=split) throw new Error('INVALID_LEAD_FILTER_STATUS_PATCH_ORDER');
+          if(mobile<=fix) throw new Error('INVALID_MOBILE_FILTER_RESET_PATCH_ORDER');
           const patch=fs.readFileSync('patch-v7-lead-filter-status-fix.js','utf8');
           for(const token of [
             'AIGUKA_LEAD_FILTER_STATUS_FIX_V2',
@@ -36,5 +39,16 @@ jobs:
             'pageshow'
           ]){
             if(!patch.includes(token)) throw new Error('MISSING_FIX_TOKEN:'+token);
+          }
+          const mobilePatch=fs.readFileSync('patch-v7-mobile-filter-reset.js','utf8');
+          for(const token of [
+            'AIGUKA_MOBILE_FILTER_RESET_V1',
+            'clearAllColumnFiltersDirect',
+            'state.filters.clear()',
+            'window.aigukaClearAllColumnFilters',
+            "window.addEventListener('pageshow'",
+            'MOBILE_FILTER_RESET_CLEAR_HANDLER_ANCHOR_NOT_FOUND'
+          ]){
+            if(!mobilePatch.includes(token)) throw new Error('MISSING_MOBILE_RESET_TOKEN:'+token);
           }
           NODE

@@ -51,6 +51,7 @@ await import("./patch-v7-lead-reel-reply-guard.js");
 await import("./patch-v7-split-leads-compat.js");
 await import("./patch-v7-split-leads-ad-performance.js");
 await import("./patch-v7-lead-filter-status-fix.js");
+await import("./patch-v7-mobile-filter-reset.js");
 
 await import("./patch-learning-client.js");
 await import("./patch-bot-page-mode-save.js");
