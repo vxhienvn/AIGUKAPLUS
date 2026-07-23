@@ -12,12 +12,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Fetch production dashboard source
+      - name: Materialize production dashboard source
         run: |
           curl --fail --silent --show-error \
             -H 'x-aiguka-diagnostic: AIGUKA_DIAG_20260724_SPLIT_LEADS_9f31' \
             'https://ezygfpeeqbbirdeazene.supabase.co/functions/v1/aiguka-diagnostic-dashboard-source' \
-            -o v7-dashboard-stable.js
+            -o /tmp/aiguka-dashboard-raw.js
+          cat > /tmp/aiguka-materialize-server.mjs <<'NODE'
+          import http from 'node:http';
+          import fs from 'node:fs';
+          const source=fs.readFileSync('/tmp/aiguka-dashboard-raw.js');
+          const payload=JSON.stringify({ok:true,chunks:[source.toString('base64')]});
+          http.createServer((req,res)=>{
+            res.writeHead(200,{'content-type':'application/json'});
+            res.end(payload);
+          }).listen(8787,'127.0.0.1');
+          NODE
+          node /tmp/aiguka-materialize-server.mjs &
+          SERVER_PID=$!
+          sleep 1
+          SUPABASE_URL='http://127.0.0.1:8787' SUPABASE_PUBLISHABLE_KEY='diagnostic' node materialize-v7-dashboard.js
+          kill "$SERVER_PID"
           node --check v7-dashboard-stable.js
       - name: Report accuracy
         run: node patch-v7-report-accuracy.js
