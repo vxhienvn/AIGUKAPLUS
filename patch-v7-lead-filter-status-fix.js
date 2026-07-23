@@ -3,10 +3,10 @@ import { spawnSync } from "node:child_process";
 
 const file = "v7-dashboard-stable.js";
 let source = fs.readFileSync(file, "utf8");
-const marker = "AIGUKA_LEAD_FILTER_STATUS_FIX_V1";
+const marker = "AIGUKA_LEAD_FILTER_STATUS_FIX_V2";
 
 if (source.includes(marker)) {
-  console.log("[AIGUKA] Lead filter and ad status fix already installed");
+  console.log("[AIGUKA] Compact status dots already installed");
 } else {
   if (!source.includes("AIGUKA_SPLIT_LEADS_AD_PERFORMANCE_V1")) {
     throw new Error("LEAD_FILTER_STATUS_REQUIRES_SPLIT_PAGES");
@@ -17,10 +17,10 @@ if (source.includes(marker)) {
     throw new Error("LEAD_FILTER_STATUS_HELPER_ANCHOR_NOT_FOUND");
   }
 
-  const helpers = String.raw`// AIGUKA_LEAD_FILTER_STATUS_FIX_V1
+  const helpers = String.raw`// AIGUKA_LEAD_FILTER_STATUS_FIX_V2
 function entityStatusDot(value) {
   const status=normalizedEntityStatus(value);
-  const kind=status.kind||'unknown';
+  const kind=status.kind==='on'?'on':'off';
   const label=status.label||'Chưa đọc được trạng thái';
   return '<span class="entity-dot '+kind+'" title="'+esc(label)+'" aria-label="'+esc(label)+'"></span>';
 }
@@ -34,6 +34,35 @@ function entityDotNameCell(name,status,id) {
 
 `;
   source = source.replace(helperAnchor, helpers + helperAnchor);
+
+  const oldBadge = `function entityStatusBadge(value) {
+  const status=normalizedEntityStatus(value);
+  return status.label?'<span class="entity-status '+status.kind+'">'+esc(status.label)+'</span>':'';
+}`;
+  const newBadge = `function entityStatusBadge(value) {
+  return entityStatusDot(value);
+}`;
+  if (!source.includes(oldBadge)) {
+    throw new Error("LEAD_FILTER_STATUS_BADGE_ANCHOR_NOT_FOUND");
+  }
+  source = source.replace(oldBadge, newBadge);
+
+  const oldNameCell = `function entityNameCell(name,status,id) {
+  const title=String(name||'').trim();
+  const identifier=String(id||'').trim();
+  if(!title&&!status&&!identifier)return '';
+  return (title?'<b>'+esc(title)+'</b>':'')+entityStatusBadge(status)+(identifier?'<br><small>ID '+esc(identifier)+'</small>':'');
+}`;
+  const newNameCell = `function entityNameCell(name,status,id) {
+  const title=String(name||'').trim();
+  const identifier=String(id||'').trim();
+  if(!title&&!identifier)return '';
+  return entityStatusDot(status)+(title?'<b>'+esc(title)+'</b>':'')+(identifier?'<br><small>ID '+esc(identifier)+'</small>':'');
+}`;
+  if (!source.includes(oldNameCell)) {
+    throw new Error("LEAD_FILTER_STATUS_NAME_CELL_ANCHOR_NOT_FOUND");
+  }
+  source = source.replace(oldNameCell, newNameCell);
 
   const performanceAnchor = "  const performance=buildMetaAdPerformance(report);";
   const hydratedPerformance = "  const performance=buildMetaAdPerformance(report);\n  performance.rows=await hydrateLeadEntityStatuses(performance.rows||[]);";
@@ -52,7 +81,7 @@ function entityDotNameCell(name,status,id) {
   source = source.replace(adsetCell, "+'<td>'+entityDotNameCell(x.adsetName,x.adsetStatus,x.adsetId)+'</td>'");
   source = source.replace(adCell, "+'<td>'+entityDotNameCell(x.adName,x.adStatus,x.adId||x.ad_id)+'</td>'");
 
-  const css = ".entity-dot{display:inline-block;width:9px;height:9px;margin:0 7px 1px 0;border-radius:50%;vertical-align:middle;background:#94a3b8;box-shadow:0 0 0 2px #fff,0 0 0 3px #cbd5e1}.entity-dot.on{background:#16a34a;box-shadow:0 0 0 2px #fff,0 0 0 3px #86efac}.entity-dot.off{background:#94a3b8}.entity-dot.pending{background:#f59e0b;box-shadow:0 0 0 2px #fff,0 0 0 3px #fcd34d}.entity-dot.bad{background:#dc2626;box-shadow:0 0 0 2px #fff,0 0 0 3px #fca5a5}.entity-dot.unknown{background:#94a3b8}.aiguka-clear-filters{margin-left:8px;padding:8px 11px!important;border:1px solid #94a3b8!important;background:#fff!important;color:#334155!important;font-weight:700}.aiguka-filter-warning{display:none;margin:0 0 10px;padding:8px 10px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px}.aiguka-filter-warning.show{display:block}";
+  const css = ".entity-dot{display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;vertical-align:middle;background:#9ca3af;border:1px solid #6b7280;box-sizing:border-box}.entity-dot.on{background:#16a34a;border-color:#15803d}.entity-dot.off{background:#9ca3af;border-color:#6b7280}.aiguka-clear-filters{margin-left:8px;padding:8px 11px!important;border:1px solid #94a3b8!important;background:#fff!important;color:#334155!important;font-weight:700}.aiguka-filter-warning{display:none;margin:0 0 10px;padding:8px 10px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px}.aiguka-filter-warning.show{display:block}";
   if (!source.includes("#tap{")) throw new Error("LEAD_FILTER_STATUS_CSS_ANCHOR_NOT_FOUND");
   source = source.replace("#tap{", css + "#tap{");
 
@@ -107,5 +136,5 @@ function entityDotNameCell(name,status,id) {
   fs.writeFileSync(file, source, "utf8");
   const syntax = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   if (syntax.status !== 0) throw new Error(`LEAD_FILTER_STATUS_SYNTAX:${syntax.stderr || syntax.stdout}`);
-  console.log("[AIGUKA] Lead filters reset on open and Meta entity status dots enabled");
+  console.log("[AIGUKA] Compact green/gray status dots installed before Campaign, Ad set and QC names");
 }
