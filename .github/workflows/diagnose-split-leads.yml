@@ -12,6 +12,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Prepare Pancake service patches
+        run: |
+          node patch-v7-pancake-classifier.js
+          node patch-v7-pancake-history.js
+          node patch-v7-pancake-tag-parser.js
       - name: Materialize production dashboard source
         run: |
           curl --fail --silent --show-error \
