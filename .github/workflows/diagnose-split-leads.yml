@@ -91,8 +91,26 @@ jobs:
         run: node patch-v7-lead-reel-old-ad-attribution.js
       - name: Reel reply guard
         run: node patch-v7-lead-reel-reply-guard.js
-      - name: Split Lead performance
-        run: node patch-v7-split-leads-ad-performance.js
+      - name: Capture split patch result
+        run: |
+          set +e
+          node patch-v7-split-leads-ad-performance.js > /tmp/aiguka-split.log 2>&1
+          echo $? > /tmp/aiguka-split.status
+          exit 0
+      - name: Requirement marker exists
+        run: '! grep -q "SPLIT_LEADS_REQUIRES_META_INSIGHTS_TRUTH" /tmp/aiguka-split.log'
+      - name: Lead page anchor exists
+        run: '! grep -q "SPLIT_LEADS_PAGE_ANCHOR_NOT_FOUND" /tmp/aiguka-split.log'
+      - name: Navigation anchor exists
+        run: '! grep -q "SPLIT_LEADS_NAV_ANCHOR_NOT_FOUND" /tmp/aiguka-split.log'
+      - name: Route anchor exists
+        run: '! grep -q "SPLIT_LEADS_ROUTE_ANCHOR_NOT_FOUND" /tmp/aiguka-split.log'
+      - name: CSS anchor exists
+        run: '! grep -q "SPLIT_LEADS_CSS_ANCHOR_NOT_FOUND" /tmp/aiguka-split.log'
+      - name: Generated split syntax is valid
+        run: '! grep -q "SPLIT_LEADS_SYNTAX" /tmp/aiguka-split.log'
+      - name: Split patch completed
+        run: test "$(cat /tmp/aiguka-split.status)" = "0"
       - name: Check generated dashboard
         run: node --check v7-dashboard-stable.js
       - name: Verify new routes and menu
