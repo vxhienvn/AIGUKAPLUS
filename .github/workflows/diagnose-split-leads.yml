@@ -91,6 +91,8 @@ jobs:
         run: node patch-v7-lead-reel-old-ad-attribution.js
       - name: Reel reply guard
         run: node patch-v7-lead-reel-reply-guard.js
+      - name: Restore split marker compatibility
+        run: node patch-v7-split-leads-compat.js
       - name: Capture split patch result
         run: |
           set +e
