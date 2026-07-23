@@ -1,0 +1,31 @@
+name: Validate lead filter status fix
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check syntax and startup order
+        run: |
+          node --check patch-v7-lead-filter-status-fix.js
+          node --check start.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const start=fs.readFileSync('start.js','utf8');
+          const split=start.indexOf('patch-v7-split-leads-ad-performance.js');
+          const fix=start.indexOf('patch-v7-lead-filter-status-fix.js');
+          if(split<0||fix<=split) throw new Error('INVALID_LEAD_FILTER_STATUS_PATCH_ORDER');
+          const patch=fs.readFileSync('patch-v7-lead-filter-status-fix.js','utf8');
+          for(const token of ['performance.rows=await hydrateLeadEntityStatuses','entityStatusDot','clearActiveFilters','pageshow']){
+            if(!patch.includes(token)) throw new Error('MISSING_FIX_TOKEN:'+token);
+          }
+          NODE
