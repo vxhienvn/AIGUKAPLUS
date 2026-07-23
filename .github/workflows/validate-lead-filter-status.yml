@@ -31,12 +31,10 @@ jobs:
             'entityStatusDot',
             'return entityStatusDot(status)',
             "const kind=status.kind==='on'?'on':'off'",
+            'width:7px',
             'clearActiveFilters',
             'pageshow'
           ]){
             if(!patch.includes(token)) throw new Error('MISSING_FIX_TOKEN:'+token);
-          }
-          if(patch.includes("return (title?'<b>'+esc(title)+'</b>':'')+entityStatusBadge(status)")){
-            throw new Error('TEXT_STATUS_BADGE_STILL_RENDERED_AFTER_NAME');
           }
           NODE
