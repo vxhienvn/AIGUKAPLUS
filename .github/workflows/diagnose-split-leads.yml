@@ -1,0 +1,75 @@
+name: Diagnose split leads patch chain
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Create dashboard fixture
+        run: |
+          cat > v7-dashboard-stable.js <<'EOF'
+          const cache = {};
+          const GRAPH_VERSION = 'v23.0';
+          const act = value => String(value || '');
+          const esc = value => String(value || '');
+          const csv = value => String(value || '');
+          const dateKey = value => String(value || '2026-07-17').slice(0,10);
+          const money = value => String(value || '0');
+          async function fetchJson(){ return {}; }
+          function period(){ return { since: '2026-07-17', until: '2026-07-17' }; }
+          function filterForm(){ return ''; }
+          function layout(_title,body,active='dashboard'){
+            const nav=(href,label,key)=>`<a class="${active===key?'active':''}" href="${href}">${label}</a>`;
+            return `<html><head><style>#tap{display:none}</style></head><body>${nav('/dashboard','Dashboard','dashboard')}${nav('/daily-report','▤ Báo cáo ngày','daily')}${nav('/leads','☏ Khách hàng / Lead','leads')}<hr>${body}</body></html>`;
+          }
+          async function getAccounts(){ return []; }
+          async function fetchAds(){ return { rows: [], errors: [], totalMessages: 0 }; }
+          async function fetchPancake(){ return { rows: [], error: null }; }
+          async function fetchDaily(){ return { rows: [], errors: [], totalSpend: 0, totalMessages: 0 }; }
+          function mapLeads(){ return []; }
+          async function dashboardPage(req,res) {}
+          async function dailyPage(req,res) {}
+          async function leadsPage(req,res) {}
+          export function installStableV7Dashboard(app) {
+            app.get('/daily-report',(req,res)=>dailyPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
+            app.get('/leads',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
+            app.get('/customers',(req,res)=>leadsPage(req,res).catch(e=>res.status(500).send(layout('Lỗi','<div>'+esc(e.message)+'</div>'))));
+            app.get('/export',async(req,res)=>res.send(''));
+          }
+          EOF
+      - name: Apply daily grouped
+        run: node patch-v7-daily-grouped.js
+      - name: Apply daily staff aligned
+        run: node patch-v7-daily-staff-aligned.js
+      - name: Apply daily runtime self contained
+        run: node patch-v7-daily-runtime-self-contained.js
+      - name: Apply Meta primary leads
+        run: node patch-v7-leads-meta-primary.js
+      - name: Apply referral source
+        run: node patch-v7-leads-referral-source.js
+      - name: Apply null safety
+        run: node patch-v7-null-safety.js
+      - name: Apply runtime integrity
+        run: node patch-v7-runtime-integrity.js
+      - name: Apply Meta insights truth
+        run: node patch-v7-lead-meta-insights-truth.js
+      - name: Apply old ad attribution
+        run: node patch-v7-lead-reel-old-ad-attribution.js
+      - name: Apply Reel reply guard
+        run: node patch-v7-lead-reel-reply-guard.js
+      - name: Apply split Lead performance
+        run: node patch-v7-split-leads-ad-performance.js
+      - name: Check generated dashboard
+        run: node --check v7-dashboard-stable.js
+      - name: Verify new routes and menu
+        run: |
+          grep -q "app.get('/ad-performance'" v7-dashboard-stable.js
+          grep -q "Hiệu quả quảng cáo" v7-dashboard-stable.js
+          grep -q "Tra cứu từng khách" v7-dashboard-stable.js
