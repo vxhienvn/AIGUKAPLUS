@@ -16,6 +16,7 @@ const kind = (item: J) =>
     : item.read ? "read"
     : item.message ? "message"
     : item.postback ? "postback"
+    : item.optin ? "marketing_optin"
     : item.referral ? "referral"
     : "unknown_messaging";
 
@@ -34,7 +35,8 @@ Deno.serve(async (req: Request) => {
       service: "aiguka-v8-webhook",
       architecture: "queue-first",
       mode: "PRODUCTION",
-      version: "2026-07-19-v15-comment-to-messenger",
+      version: "2026-07-23-v18-marketing-optin-promotion",
+      marketing_optins: true,
     });
   }
   if (req.method !== "POST") return out({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -68,14 +70,14 @@ Deno.serve(async (req: Request) => {
     },
   });
 
-  const counters: J = { saved: 0, skipped: 0, failed: 0, echoes: 0, comments: 0 };
+  const counters: J = { saved: 0, skipped: 0, failed: 0, echoes: 0, comments: 0, optins: 0 };
   const profiles: Promise<void>[] = [];
 
   for (const entry of body.entry || []) {
     const pageId = txt(entry.id);
     for (const item of entry.messaging || []) {
       const eventKind = kind(item);
-      if (!["message", "message_echo", "postback"].includes(eventKind)) {
+      if (!["message", "message_echo", "postback", "marketing_optin"].includes(eventKind)) {
         counters.skipped += 1;
         await audit({
           request_id: `${postId}:skip:${counters.skipped}`,
@@ -92,14 +94,20 @@ Deno.serve(async (req: Request) => {
 
       const message = item.message || {};
       const postback = item.postback || {};
+      const optin = item.optin || {};
       const isEcho = eventKind === "message_echo";
       if (isEcho) counters.echoes += 1;
       const rawSender = txt(item.sender?.id);
       const rawRecipient = txt(item.recipient?.id) || pageId;
       const customer = isEcho ? rawRecipient : rawSender;
       const timestamp = Number(item.timestamp || Date.now());
-      const messageId = txt(message.mid) || txt(postback.mid) || `${pageId}:${customer}:${timestamp}`;
-      const messageText = txt(message.text) || txt(postback.title) || txt(postback.payload);
+      const messageId = txt(message.mid) || txt(postback.mid) || (
+        eventKind === "marketing_optin"
+          ? `optin:${pageId}:${customer}:${timestamp}`
+          : `${pageId}:${customer}:${timestamp}`
+      );
+      const messageText = txt(message.text) || txt(postback.title) || txt(postback.payload) ||
+        txt(optin.title) || txt(optin.payload) || txt(optin.notification_messages_status);
       const row = {
         meta_object: body.object,
         page_id: pageId,
@@ -121,7 +129,7 @@ Deno.serve(async (req: Request) => {
         page_id: pageId,
         sender_id: customer,
         message_id: messageId,
-        step: isEcho ? "ECHO_RECEIVED" : "RECEIVED",
+        step: eventKind === "marketing_optin" ? "MARKETING_OPTIN_RECEIVED" : (isEcho ? "ECHO_RECEIVED" : "RECEIVED"),
         status: "ok",
         detail: messageText || "",
         payload_preview: { kind: eventKind },
@@ -140,6 +148,41 @@ Deno.serve(async (req: Request) => {
           error_code: "META_EVENT_UPSERT_FAILED",
           detail: error.message,
         });
+      } else if (eventKind === "marketing_optin") {
+        const { data: optinResult, error: optinError } = await client.rpc("v8_record_marketing_optin", {
+          p_page_id: pageId,
+          p_sender_id: customer,
+          p_optin: optin,
+          p_event_time: new Date(timestamp).toISOString(),
+          p_raw_payload: item,
+        });
+        if (optinError) {
+          counters.failed += 1;
+          await audit({
+            request_id: messageId,
+            page_id: pageId,
+            sender_id: customer,
+            message_id: messageId,
+            step: "MARKETING_OPTIN_PROCESS_FAILED",
+            status: "error",
+            error_code: "MARKETING_OPTIN_RPC_FAILED",
+            detail: optinError.message,
+          });
+        } else {
+          counters.saved += 1;
+          counters.optins += 1;
+          await audit({
+            request_id: messageId,
+            page_id: pageId,
+            sender_id: customer,
+            message_id: messageId,
+            step: "MARKETING_OPTIN_COMPLETED",
+            status: "ok",
+            detail: String(optinResult?.status || "recorded"),
+            payload_preview: { result: optinResult },
+          });
+          if (pageId && customer) profiles.push(syncCustomerProfile(client, pageId, customer));
+        }
       } else {
         counters.saved += 1;
         await audit({
