@@ -2,10 +2,6 @@ import { loadActiveMetaConnection } from "./meta-token-store.js";
 
 process.env.META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "AIGUKA_V8_META_VERIFY";
 
-// materialize-v7-dashboard only uses this key for a server-side RPC during
-// startup. It is never written into the generated dashboard or sent to the
-// browser. Railway already requires SUPABASE_SERVICE_ROLE_KEY for its workers,
-// so use it when no publishable/anon key variable was configured separately.
 if (
   !process.env.SUPABASE_PUBLISHABLE_KEY &&
   !process.env.SUPABASE_ANON_KEY &&
@@ -93,3 +89,4 @@ await import("./drive-sync-request-worker.js");
 await import("./ai-dispatch-worker.js");
 await import("./response-obligation-worker.js");
 await import("./outbound-worker.js");
+await import("./report-v21-worker.js");
