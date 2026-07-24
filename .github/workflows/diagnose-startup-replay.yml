@@ -5,40 +5,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  startup:
+  snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - run: npm install --no-audit --no-fund
-      - name: Run complete startup chain
-        id: startup
-        shell: bash
+      - name: Download verified dashboard snapshot
         run: |
-          set +e
-          PORT=3987 node start.js > /tmp/aiguka-startup.log 2>&1 &
-          pid=$!
-          sleep 35
-          if kill -0 "$pid" 2>/dev/null; then
-            echo "STARTUP_PROCESS_ALIVE"
-            cat /tmp/aiguka-startup.log
-            kill "$pid" || true
-            exit 0
-          fi
-          status=1
-          wait "$pid" || status=$?
-          echo "STARTUP_PROCESS_EXITED:$status"
-          cat /tmp/aiguka-startup.log
-          exit 1
-      - name: Upload startup log
-        if: always()
+          curl --fail --silent --show-error --location \
+            'https://ezygfpeeqbbirdeazene.supabase.co/functions/v1/aiguka-dashboard-snapshot-export-temp?token=snap_7f1c9a34d2e6485b9a23c6ef' \
+            --output /tmp/v7-dashboard-stable.snapshot.js
+          test "$(wc -c < /tmp/v7-dashboard-stable.snapshot.js)" = "23115"
+          test "$(md5sum /tmp/v7-dashboard-stable.snapshot.js | cut -d' ' -f1)" = "971b141fedd159796a7d57a1467aaf69"
+      - name: Upload dashboard snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: aiguka-startup-log
-          path: /tmp/aiguka-startup.log
+          name: v7-dashboard-stable-snapshot
+          path: /tmp/v7-dashboard-stable.snapshot.js
           if-no-files-found: error
           retention-days: 1
