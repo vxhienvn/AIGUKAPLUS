@@ -1,5 +1,6 @@
--- Keep the 4-second outbound claim path lightweight. Global SLA and queue
--- reconciliation scans run elsewhere and must not block live customer replies.
+-- Applied manually to production Supabase on 2026-07-24.
+-- Stored here for audit; do not auto-replay during Railway startup.
+-- Keep the four-second outbound claim path lightweight.
 create or replace function public.v8_claim_outbound_batch(
   p_worker_name text default 'v8-outbound-worker',
   p_batch_size integer default 10

@@ -1,3 +1,5 @@
+-- Applied manually to production Supabase on 2026-07-24.
+-- Stored here for audit; do not auto-replay during Railway startup.
 -- Meta's click-to-call companion text is Page automation, not a Sale/Admin reply.
 create or replace function public.v8_is_known_page_automation_text(p_message_text text)
 returns boolean
