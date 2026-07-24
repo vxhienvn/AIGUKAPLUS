@@ -10,9 +10,9 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Download verified dashboard snapshot
+      - name: Download verified dashboard snapshot from direct chunk reader
         run: |
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --max-time 60 \
             'https://ezygfpeeqbbirdeazene.supabase.co/functions/v1/aiguka-dashboard-snapshot-export-temp?token=snap_7f1c9a34d2e6485b9a23c6ef' \
             --output /tmp/v7-dashboard-stable.snapshot.js
           test "$(wc -c < /tmp/v7-dashboard-stable.snapshot.js)" = "23115"
