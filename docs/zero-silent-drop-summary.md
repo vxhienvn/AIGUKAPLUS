@@ -1,1 +1,0 @@
-A customer turn is no longer considered complete merely because an intermediate queue says `done` or `completed`. The durable obligation ledger follows it through AI, staging, outbound and final resolution, with deterministic fallback and Sale escalation when required.
