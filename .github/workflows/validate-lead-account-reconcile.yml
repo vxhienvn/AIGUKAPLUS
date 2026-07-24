@@ -1,0 +1,38 @@
+name: Validate lead account reconciliation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check patch and order
+        run: |
+          node --check patch-v7-lead-account-reconcile.js
+          node --check start.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const start=fs.readFileSync('start.js','utf8');
+          const split=start.indexOf('patch-v7-split-leads-ad-performance.js');
+          const status=start.indexOf('patch-v7-lead-filter-status-fix.js');
+          const reconcile=start.indexOf('patch-v7-lead-account-reconcile.js');
+          if(split<0||status<=split||reconcile<=status) throw new Error('INVALID_RECONCILE_PATCH_ORDER');
+          const patch=fs.readFileSync('patch-v7-lead-account-reconcile.js','utf8');
+          for(const token of [
+            'AIGUKA_LEAD_ACCOUNT_RECONCILE_V1',
+            'v8_meta_customer_leads_daily',
+            'v8_meta_page_ad_accounts',
+            'metaAccountCustomerTargets',
+            'matched.size>=target',
+            "campaignId:'',campaignName:''",
+            "reconciliation_level:'account'"
+          ]) if(!patch.includes(token)) throw new Error('MISSING_RECONCILE_TOKEN:'+token);
+          NODE
