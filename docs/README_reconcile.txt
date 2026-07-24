@@ -1,0 +1,1 @@
+Validation target: 2026-07-23 + account 311242249583664 = 6 Meta advertising customers.
