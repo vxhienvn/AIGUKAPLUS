@@ -111,66 +111,7 @@ if (syntax.status !== 0) {
   throw new Error(`V7_RUNTIME_INTEGRITY_SYNTAX:${syntax.stderr || syntax.stdout}`);
 }
 
-// Verify real Supabase schemas before serving traffic. A deterministic 4xx means
-// the schema is wrong and must still fail startup. Network timeouts and Supabase
-// 5xx responses are transient: retry them, report degraded startup, but do not
-// take the entire bot and outbound worker offline.
-const supabaseUrl = String(
-  process.env.SUPABASE_URL || "https://ezygfpeeqbbirdeazene.supabase.co",
-).replace(/\/$/, "");
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function verifySchemaEndpoint(label, view, column) {
-  const params = new URLSearchParams({ select: column, limit: "1" });
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(`${supabaseUrl}/rest/v1/${view}?${params.toString()}`, {
-        headers: {
-          apikey: supabaseKey,
-          authorization: `Bearer ${supabaseKey}`,
-        },
-        signal: AbortSignal.timeout(8_000),
-        cache: "no-store",
-      });
-
-      if (response.ok) return true;
-
-      const detail = await response.text().catch(() => "");
-      if (response.status >= 400 && response.status < 500) {
-        throw new Error(
-          `V7_RUNTIME_SCHEMA_${label.toUpperCase()}_${response.status}:${detail.slice(0, 300)}`,
-        );
-      }
-      lastError = new Error(`SUPABASE_TRANSIENT_${response.status}:${detail.slice(0, 200)}`);
-    } catch (error) {
-      if (String(error?.message || "").startsWith("V7_RUNTIME_SCHEMA_")) throw error;
-      lastError = error;
-    }
-
-    if (attempt < 3) await sleep(500 * attempt);
-  }
-
-  console.warn(
-    `[AIGUKA] Supabase schema check ${label} deferred after transient failure: ${String(lastError?.message || lastError).slice(0, 300)}`,
-  );
-  return false;
-}
-
-let onlineSchemaChecks = 0;
-if (supabaseKey) {
-  const schemaChecks = [
-    ["daily_first_start", "v8_meta_conversation_starts", "conversation_started_at"],
-    ["lead_ad_referral", "v8_meta_ad_referral_entries", "referral_at"],
-  ];
-  for (const [label, view, column] of schemaChecks) {
-    if (await verifySchemaEndpoint(label, view, column)) onlineSchemaChecks += 1;
-  }
-}
-
-console.log(
-  `[AIGUKA] V7 runtime integrity verified; online Supabase schema checks ${onlineSchemaChecks}/2`,
-);
+// Remote database availability is monitored by the runtime workers. Never make
+// a live network request a prerequisite for starting the dashboard, AI dispatch
+// or outbound delivery process.
+console.log("[AIGUKA] V7 static runtime integrity verified; online schema checks deferred to health workers");
