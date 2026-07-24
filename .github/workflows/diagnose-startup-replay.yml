@@ -1,0 +1,35 @@
+name: Diagnose Railway startup replay
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Run complete startup chain
+        shell: bash
+        run: |
+          set +e
+          PORT=3987 node start.js > /tmp/aiguka-startup.log 2>&1 &
+          pid=$!
+          sleep 35
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "STARTUP_PROCESS_ALIVE"
+            cat /tmp/aiguka-startup.log
+            kill "$pid" || true
+            exit 0
+          fi
+          status=1
+          wait "$pid" || status=$?
+          echo "STARTUP_PROCESS_EXITED:$status"
+          cat /tmp/aiguka-startup.log
+          exit 1
