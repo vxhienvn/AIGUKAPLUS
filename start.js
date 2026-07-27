@@ -64,6 +64,7 @@ await import("./patch-v7-split-leads-compat.js");
 await import("./patch-v7-split-leads-ad-performance.js");
 await import("./patch-v7-lead-filter-status-fix.js");
 await import("./patch-v7-lead-account-reconcile.js");
+await import("./patch-v7-lead-filter-dataset-fix.js");
 
 await import("./patch-learning-client.js");
 await import("./patch-bot-page-mode-save.js");

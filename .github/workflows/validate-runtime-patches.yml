@@ -35,6 +35,9 @@ jobs:
           node --check patch-v7-lead-reel-reply-guard.js
           node --check patch-v7-split-leads-compat.js
           node --check patch-v7-split-leads-ad-performance.js
+          node --check patch-v7-lead-filter-status-fix.js
+          node --check patch-v7-lead-account-reconcile.js
+          node --check patch-v7-lead-filter-dataset-fix.js
           node --check patch-catalog-key-rename.js
           node --check start.js
 
@@ -56,6 +59,9 @@ jobs:
             'patch-v7-lead-reel-reply-guard.js',
             'patch-v7-split-leads-compat.js',
             'patch-v7-split-leads-ad-performance.js',
+            'patch-v7-lead-filter-status-fix.js',
+            'patch-v7-lead-account-reconcile.js',
+            'patch-v7-lead-filter-dataset-fix.js',
           ];
           const positions=names.map(name=>source.indexOf(name));
           if(positions.some(value=>value<0)) throw new Error('MISSING_RUNTIME_PATCH');
