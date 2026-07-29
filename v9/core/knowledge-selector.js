@@ -21,7 +21,7 @@ function capString(value, max) {
 
 function scoreDocument(document, pageId, query, intents) {
   let score = 0;
-  if (!document || document.status === "archived") return -Infinity;
+  if (!document || document.status !== "published") return -Infinity;
   if (!document.page_id) score += 20;
   else if (String(document.page_id) === String(pageId || "")) score += 60;
   else return -Infinity;
