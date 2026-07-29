@@ -15,6 +15,7 @@ const SOURCES = [
     name: "pages",
     eventType: "page_dimension",
     table: "v9_pages",
+    keyField: "page_id",
     timeField: "updated_at",
     select: "page_id,page_name,timezone,operating_mode,coexistence_mode,canary_percent,is_active,created_at,updated_at",
   },
@@ -22,6 +23,7 @@ const SOURCES = [
     name: "customers",
     eventType: "customer_dimension",
     table: "v9_customers",
+    keyField: "id",
     timeField: "updated_at",
     select: "id,page_id,customer_id,display_name,gender,preferred_salutation,first_seen_at,last_seen_at,created_at,updated_at",
   },
@@ -29,6 +31,7 @@ const SOURCES = [
     name: "messages",
     eventType: "message_fact",
     table: "v9_events",
+    keyField: "id",
     timeField: "created_at",
     select: "id,source_system,source_event_id,page_id,customer_id,actor_type,event_type,message_text,attachments,referral,occurred_at,created_at",
   },
@@ -36,6 +39,7 @@ const SOURCES = [
     name: "contacts",
     eventType: "contact_fact",
     table: "v9_contacts",
+    keyField: "id",
     timeField: "created_at",
     select: "id,page_id,customer_id,contact_type,contact_value,normalized_value,source_event_id,confidence,captured_at,created_at",
   },
@@ -43,6 +47,7 @@ const SOURCES = [
     name: "decisions",
     eventType: "ai_decision_fact",
     table: "v9_decisions",
+    keyField: "id",
     timeField: "updated_at",
     select: "id,source_event_id,page_id,sender_id,mode,status,action,confidence,knowledge_version,output,risk_flags,latency_ms,created_at,updated_at",
   },
@@ -50,6 +55,7 @@ const SOURCES = [
     name: "deliveries",
     eventType: "delivery_fact",
     table: "v9_delivery_bundles",
+    keyField: "id",
     timeField: "updated_at",
     select: "id,decision_id,page_id,sender_id,text_body,asset_refs,status,created_at,updated_at",
   },
@@ -57,6 +63,7 @@ const SOURCES = [
     name: "sla",
     eventType: "sla_fact",
     table: "v9_sla_events",
+    keyField: "id",
     timeField: "updated_at",
     select: "id,source_event_id,page_id,sender_id,deadline_at,status,resolution,resolved_at,created_at,updated_at",
   },
@@ -91,17 +98,21 @@ async function readCursor(source) {
   return rows?.[0] || { cursor_created_at: "1970-01-01T00:00:00.000Z", cursor_id: "" };
 }
 
-function isAfter(row, cursor, timeField) {
-  const rowTime = Date.parse(String(row[timeField] || row.created_at || 0));
+function rowKey(source, row) {
+  return String(row?.[source.keyField] || "");
+}
+
+function isAfter(source, row, cursor) {
+  const rowTime = Date.parse(String(row[source.timeField] || row.created_at || 0));
   const cursorTime = Date.parse(String(cursor.cursor_created_at || 0));
-  return rowTime > cursorTime || (rowTime === cursorTime && String(row.id || row.page_id) > String(cursor.cursor_id || ""));
+  return rowTime > cursorTime || (rowTime === cursorTime && rowKey(source, row) > String(cursor.cursor_id || ""));
 }
 
 async function sourceRows(source, cursor) {
   const time = encodeURIComponent(cursor.cursor_created_at || "1970-01-01T00:00:00.000Z");
   const limit = Math.max(BATCH_SIZE * 3, 50);
-  const rows = await core(`${source.table}?select=${source.select}&${source.timeField}=gte.${time}&order=${source.timeField}.asc,id.asc&limit=${limit}`);
-  return (rows || []).filter((row) => isAfter(row, cursor, source.timeField)).slice(0, BATCH_SIZE);
+  const rows = await core(`${source.table}?select=${source.select}&${source.timeField}=gte.${time}&order=${source.timeField}.asc,${source.keyField}.asc&limit=${limit}`);
+  return (rows || []).filter((row) => isAfter(source, row, cursor)).slice(0, BATCH_SIZE);
 }
 
 async function saveCursor(source, row) {
@@ -111,7 +122,7 @@ async function saveCursor(source, row) {
     body: {
       worker_name: cursorName(source),
       cursor_created_at: row[source.timeField] || row.created_at,
-      cursor_id: String(row.id || row.page_id || ""),
+      cursor_id: rowKey(source, row),
       updated_at: new Date().toISOString(),
     },
   });
