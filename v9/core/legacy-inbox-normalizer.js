@@ -48,7 +48,7 @@ export function normalizeLegacyWebhookInboxRow(row, nowMs = Date.now()) {
     const change = object(payload.change);
     const value = object(change.value);
     const pageId = text(row.page_id || payload.page_id);
-    const senderId = text(row.sender_id || value.from?.id);
+    const senderId = text(value.from?.id || row.sender_id);
     return {
       source_system: "legacy_webhook_inbox",
       source_event_id: sourceEventId,
