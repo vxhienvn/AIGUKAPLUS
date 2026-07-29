@@ -72,7 +72,7 @@ async function saveCursor(row) {
 async function insertEvent(event) {
   const rows = await rest("v9_events?on_conflict=source_event_id", {
     method: "POST",
-    prefer: "resolution=ignore-duplicates,return=representation",
+    prefer: "resolution=merge-duplicates,return=representation",
     body: {
       source_system: event.sourceSystem,
       source_event_id: event.sourceEventId,
