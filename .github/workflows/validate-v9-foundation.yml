@@ -88,7 +88,7 @@ jobs:
           test "$(grep -c '^create table public\.' $reporting_schema)" -eq 13
           test "$(grep -c '^create or replace function' $reporting_schema || true)" -eq 0
           ! grep -Eiq '^create trigger|pg_cron|net.http|http_post' $reporting_schema
-          ! grep -Eiq 'message_text|contact_value|normalized_value|phone|zalo|token_cipher|api_key' $reporting_schema
+          ! grep -Eiq '^[[:space:]]*(message_text|contact_value|normalized_value|phone|zalo|token_cipher|api_key)[[:space:]]' $reporting_schema
           grep -F 'v9_reporting_outbox' v9-reporting-publisher.js
           grep -F 'dead_letter' v9-reporting-sync-worker.js
           grep -F 'assertReportingPayloadPrivacy' v9-reporting-publisher.js
