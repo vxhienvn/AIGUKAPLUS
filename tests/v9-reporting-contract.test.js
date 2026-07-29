@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { buildReportingEnvelope, assertReportingPayloadPrivacy, hashReportingContact } from "../v9/core/reporting-contract.js";
 
 test("message reporting keeps metrics but removes raw text", () => {
+  const message = "Cho xin giá bồn cầu";
   const envelope = buildReportingEnvelope("message_fact", {
     id: "event-1",
     source_system: "meta",
@@ -11,12 +12,12 @@ test("message reporting keeps metrics but removes raw text", () => {
     customer_id: "customer-1",
     actor_type: "customer",
     event_type: "customer_message",
-    message_text: "Cho xin giá bồn cầu",
+    message_text: message,
     attachments: [{ type: "image" }],
     referral: { ad_id: "ad-1", campaign_id: "campaign-1" },
     occurred_at: "2026-07-29T10:00:00Z",
   });
-  assert.equal(envelope.payload.message_length, 20);
+  assert.equal(envelope.payload.message_length, message.length);
   assert.equal(envelope.payload.attachment_count, 1);
   assert.equal(envelope.payload.ad_id, "ad-1");
   assert.ok(!("message_text" in envelope.payload));
