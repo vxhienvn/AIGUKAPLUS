@@ -11,6 +11,7 @@ const snapshot = {
       { document_key: "global_policy", version_no: 2, document_type: "business_policy", page_id: null, title: "Quy tắc chung", content: "Trả lời đúng nhu cầu rồi xin SĐT/Zalo.", status: "published", priority: 10 },
       { document_key: "page_address", version_no: 3, document_type: "location", page_id: "page-1", title: "Địa chỉ showroom", content: "Showroom tại 254 Phố Keo, Gia Lâm.", status: "published", priority: 5 },
       { document_key: "other_page", version_no: 1, document_type: "context", page_id: "page-2", title: "Trang khác", content: "Không được chọn", status: "published", priority: 1 },
+      { document_key: "draft_prompt", version_no: 9, document_type: "system_prompt", page_id: null, title: "Bản thử", content: "Không được đưa vào model", status: "draft", priority: 1 },
       { document_key: "archived", version_no: 1, document_type: "promotion", page_id: null, title: "Cũ", content: "Không dùng", status: "archived", priority: 1 },
     ],
     catalog: [
@@ -26,21 +27,24 @@ const snapshot = {
 };
 
 function decisionInput(overrides = {}) {
+  const { turn: turnOverrides = {}, ...rest } = overrides;
   return {
     page_id: "page-1",
     turn: {
       combinedText: "Cho xin địa chỉ và mẫu bồn cầu, bếp từ",
       salesSignals: { intents: ["address", "samples"], products: ["bon_cau", "bep_tu_hut_mui"] },
-      ...overrides.turn,
+      ...turnOverrides,
     },
-    ...overrides,
+    ...rest,
   };
 }
 
-test("selects page and global documents but excludes other pages", () => {
+test("selects page and global published documents only", () => {
   const selected = selectKnowledgeContext(snapshot, decisionInput());
   assert.deepEqual(selected.documents.map((item) => item.document_key), ["page_address", "global_policy"]);
   assert.ok(!selected.documents.some((item) => item.document_key === "other_page"));
+  assert.ok(!selected.documents.some((item) => item.document_key === "draft_prompt"));
+  assert.ok(!selected.documents.some((item) => item.document_key === "archived"));
 });
 
 test("preserves multiple requested product groups and excludes unrelated products", () => {
