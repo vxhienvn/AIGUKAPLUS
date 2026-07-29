@@ -66,6 +66,11 @@ export function normalizeV8MetaEvent(row, nowMs = Date.now()) {
     pageId: row.page_id == null ? null : String(row.page_id),
     senderId: row.sender_id == null ? null : String(row.sender_id),
     recipientId: row.recipient_id == null ? null : String(row.recipient_id),
+    customerId: actorType === "customer"
+      ? (row.sender_id == null ? null : String(row.sender_id))
+      : actorType === "page_unknown"
+        ? (row.recipient_id == null ? null : String(row.recipient_id))
+        : null,
     messageId: row.message_id == null ? null : String(row.message_id),
     actorType,
     actorEvidence: {
