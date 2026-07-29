@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { buildReportingEnvelope, assertReportingPayloadPrivacy, hashReportingContact } from "../v9/core/reporting-contract.js";
 
 test("message reporting keeps metrics but removes raw text", () => {
@@ -109,4 +110,16 @@ test("page and customer dimensions contain no contact fields", () => {
   });
   assert.equal(page.payload.page_id, "page-1");
   assert.doesNotMatch(JSON.stringify(customer), /0965499803|phone|zalo/);
+});
+
+test("reporting publisher and sync have separate startup gates", () => {
+  const start = fs.readFileSync(new URL("../start.js", import.meta.url), "utf8");
+  const coreGate = start.slice(start.indexOf("if (v9CoreReady) {"));
+  assert.match(coreGate, /v9-reporting-publisher\.js/);
+  const reportingGateStart = coreGate.indexOf("if (reportingReady) {");
+  const reportingGateEnd = coreGate.indexOf("} else {", reportingGateStart);
+  assert.ok(reportingGateStart >= 0 && reportingGateEnd > reportingGateStart);
+  const reportingGate = coreGate.slice(reportingGateStart, reportingGateEnd);
+  assert.match(reportingGate, /v9-reporting-sync-worker\.js/);
+  assert.match(start, /AIGUKA_V9_REPORTING_SERVICE_ROLE_KEY/);
 });
