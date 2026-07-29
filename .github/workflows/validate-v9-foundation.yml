@@ -54,6 +54,7 @@ jobs:
           ! grep -F 'graph.facebook.com' v9-ai-shadow-worker.js
       - name: Confirm clean Core constraints
         run: |
-          test "$(grep -h -c '^create table.*public.v9_' supabase/migrations/20260729*.sql | awk '{s+=$1} END {print s}')" -eq 18
-          test "$(grep -h -c '^create or replace function public.v9_' supabase/migrations/20260729*.sql | awk '{s+=$1} END {print s}')" -eq 1
-          ! grep -Eiq '^create trigger|pg_cron|net.http|http_post' supabase/migrations/20260729151500_v9_core_clean_foundation.sql supabase/migrations/20260729164000_v9_core_integrations.sql
+          core_files="supabase/migrations/20260729151500_v9_core_clean_foundation.sql supabase/migrations/20260729164000_v9_core_integrations.sql"
+          test "$(cat $core_files | grep -c '^create table.*public.v9_')" -eq 18
+          test "$(cat $core_files | grep -c '^create or replace function public.v9_')" -eq 1
+          ! grep -Eiq '^create trigger|pg_cron|net.http|http_post' $core_files
