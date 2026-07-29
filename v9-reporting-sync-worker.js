@@ -108,7 +108,7 @@ async function recordIngest(row) {
 async function materialize(row, payload) {
   const target = TARGETS[row.event_type];
   if (!target) throw new Error(`REPORTING_EVENT_TYPE_UNSUPPORTED:${row.event_type}`);
-  await reporting(`${target.table}?on_conflict=${encodeURIComponent(target.conflict)}`, {
+  await reporting(`${target.table}?on_conflict=${target.conflict}`, {
     method: "POST",
     prefer: "resolution=merge-duplicates,return=minimal",
     body: payload,
