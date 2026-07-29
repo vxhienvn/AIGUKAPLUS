@@ -322,7 +322,7 @@ insert into public.ai_ad_mappings(
   confidence,source,is_active,metadata,created_at,updated_at
 )
 select
-  null,
+  '*',
   ad_account_id,
   campaign_id,
   adset_id,
@@ -397,8 +397,7 @@ with snapshot_content as (
     'ad_mappings',coalesce((
       select jsonb_agg(to_jsonb(m) order by m.ad_account_id,m.campaign_id,m.adset_id,m.ad_id)
       from public.ai_ad_mappings m where m.is_active
-    ),'[]'::jsonb),
-    'built_at',now()
+    ),'[]'::jsonb)
   ) content
 ), inserted as (
   insert into public.ai_published_snapshots(checksum,content,status,source_versions,created_by)
