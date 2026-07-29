@@ -110,8 +110,11 @@ begin
   select count(distinct document_key) into archived_documents
   from public.ai_documents where document_key like 'learning_%';
   select count(*) into source_settings from public.ai_learning_settings;
-  select jsonb_object_length(coalesce(settings->'legacy_learning_settings','{}'::jsonb))
-    into archived_settings from public.ai_runtime_config where id=1;
+  select count(*) into archived_settings
+  from jsonb_object_keys(coalesce((
+    select settings->'legacy_learning_settings'
+    from public.ai_runtime_config where id=1
+  ),'{}'::jsonb));
   if archived_documents <> source_documents then
     raise exception 'V9_LEARNING_ARCHIVE_DOCUMENT_COUNT_MISMATCH source=% archived=%',source_documents,archived_documents;
   end if;
