@@ -34,10 +34,7 @@ async function installLiveRelease() {
 
   const outboundFile = "v9-live-outbound-worker.js";
   let outboundSource = fs.readFileSync(outboundFile, "utf8");
-  outboundSource = outboundSource.replace(
-    'body: { status: assets.length ? "text_sent" : "sent", updated_at: new Date().toISOString() }',
-    'body: { status: "sent", updated_at: new Date().toISOString() }',
-  );
+  outboundSource = outboundSource.replace('body: { status: assets.length ? "text_sent" : "sent", updated_at: new Date().toISOString() }', 'body: { status: "sent", updated_at: new Date().toISOString() }');
   fs.writeFileSync(outboundFile, outboundSource);
 
   await import("./v9-support-release-patch.js");
