@@ -43,7 +43,9 @@ test("SUPPORT fast vision keeps AIcake primary and grants AIGUKA one image sente
   assert.match(turn, /hasImage: realImageAttachments\.length > 0/);
   assert.match(turn, /sticker_id/);
 
-  assert.match(ai, /v9_support_fast_vision_v6/);
+  // Media Authority is deliberately applied after fast vision, so it owns the final worker version.
+  assert.match(ai, /v9_ai_media_authority_v5/);
+  assert.match(ai, /AIGUKA_V9_SUPPORT_FAST_VISION_V1/);
   assert.match(ai, /type: "image_url"/);
   assert.match(ai, /type: "input_image"/);
   assert.match(ai, /supportImageDecision/);
