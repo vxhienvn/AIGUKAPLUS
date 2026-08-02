@@ -60,6 +60,11 @@ export function detectProductKeys(value) {
   for (const [key, pattern] of PRODUCT_RULES) {
     if (pattern.test(normalized)) push(products, key);
   }
+  if (products.includes("bep_tu_hut_mui") && products.includes("chau_voi_rua_bat")
+    && /\b(rua bep|bon rua bep)\b/.test(normalized)
+    && !/\bbep (dien|tu|[1-9])\b|\bhut mui\b/.test(normalized)) {
+    products.splice(products.indexOf("bep_tu_hut_mui"), 1);
+  }
   return products;
 }
 
@@ -70,7 +75,7 @@ function detectIntents(value, options = {}) {
 
   const address = /\b(dia chi|o dau|vi tri|showroom|duong di|co so|cua hang)\b/.test(normalized);
   const visit = /\b(den|qua|len|ghe|toi|sang|chieu) (xem|cua hang|showroom)\b|\bxem truc tiep\b|\btruc tiep (xem|qua)\b/.test(normalized);
-  const explicitMedia = /\b(mau|hinh|anh|catalog|catalogue|slide)\b|\bchup (cho|de)\b|\bgui .*\b(xem|mau|anh|hinh)\b|\bxem (mau|anh|hinh|catalog|slide)\b/.test(normalized);
+  const explicitMedia = /\b(mau|hinh|anh|catalog|catalogue|slide)\b|\bchup .* xem\b|\bchup (cho|de)\b|\bgui .*\b(xem|mau|anh|hinh|qua day)\b|\bxem (mau|anh|hinh|catalog|slide)\b/.test(normalized);
   const bareView = /^(cho )?xem( voi| nhe| a| di)?$/.test(normalized) || /\bcho (anh|chi|minh|toi|em)? ?xem\b/.test(normalized);
 
   if (/\b(gia|bao nhieu|bao gia|chi phi)\b/.test(normalized)) push(intents, "price");
