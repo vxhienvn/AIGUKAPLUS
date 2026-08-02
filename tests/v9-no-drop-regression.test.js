@@ -90,6 +90,13 @@ test("full Railway patch chain installs no-drop workers", async () => {
   const root = process.cwd();
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "aiguka-no-drop-"));
   const files = [
+    "v9/core/contact-detector.js",
+    "v9/core/turn-builder.js",
+    "v9/core/conversation-intelligence.js",
+    "v9/core/knowledge-selector.js",
+    "v9/core/knowledge-selector-v2.js",
+    "v9/core/decision-contract.js",
+    "v9/core/decision-contract-v2.js",
     "v9/core/media-authority.js",
     "v9-direct-core-worker.js",
     "v9-ai-live-worker.js",
