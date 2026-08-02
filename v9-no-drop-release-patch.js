@@ -47,6 +47,35 @@ function replaceBraceBlock(source, startAnchor, replacement, label) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 
+function replaceEnclosingIfByToken(source, innerToken, replacement, label) {
+  if (source.includes(replacement)) return source;
+  const inner = source.indexOf(innerToken);
+  if (inner < 0) throw new Error(`${label}_TOKEN_NOT_FOUND`);
+
+  let start = source.lastIndexOf("\n  if", inner);
+  if (start >= 0) start += 1;
+  else start = source.lastIndexOf("  if", inner);
+  if (start < 0) throw new Error(`${label}_IF_NOT_FOUND`);
+
+  const open = source.indexOf("{", start);
+  if (open < 0 || open > inner) throw new Error(`${label}_OPEN_BRACE_NOT_FOUND`);
+
+  let depth = 0;
+  let end = -1;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = index + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) throw new Error(`${label}_CLOSE_BRACE_NOT_FOUND`);
+  return source.slice(0, start) + replacement + source.slice(end);
+}
+
 // A known phone/Zalo is a Contact Lock against asking again, not a conversation lock.
 // Only the current message that actually contains a new contact is silently captured.
 {
@@ -94,9 +123,9 @@ function replaceBraceBlock(source, startAnchor, replacement, label) {
     );
 
     const newPageGate = `  const turn = decision?.input_snapshot?.turn || {};\n  const evidence = turn.responseEvidence || turn.response_evidence || {};\n  if (evidence.verifiedHuman || evidence.bot || evidence.automation || evidence.ambiguousPage) {\n    return { allowed: false, reason: "PAGE_ALREADY_REPLIED" };\n  }\n  const latestCustomerAt = Math.max(0, ...(Array.isArray(turn.customerMessages) ? turn.customerMessages : [])\n    .map((item) => Date.parse(item?.occurredAt || item?.occurred_at || ""))\n    .filter(Number.isFinite));\n  const lastPageAt = Date.parse(state.last_page_event_at || "");\n  if (latestCustomerAt > 0 && Number.isFinite(lastPageAt) && lastPageAt >= latestCustomerAt) {\n    return { allowed: false, reason: "PAGE_ALREADY_REPLIED" };\n  }`;
-    source = replaceBraceBlock(
+    source = replaceEnclosingIfByToken(
       source,
-      "  if (state.last_page_event_at && state.last_customer_event_at && isAfterOrEqual(",
+      'reason: "PAGE_ALREADY_REPLIED"',
       newPageGate,
       "NO_DROP_OUTBOUND_PAGE_GATE",
     );
