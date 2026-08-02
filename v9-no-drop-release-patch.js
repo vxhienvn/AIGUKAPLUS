@@ -25,6 +25,28 @@ function replaceBetween(source, startAnchor, endAnchor, replacement, label) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 
+function replaceBraceBlock(source, startAnchor, replacement, label) {
+  if (source.includes(replacement)) return source;
+  const start = source.indexOf(startAnchor);
+  if (start < 0) throw new Error(`${label}_ANCHOR_NOT_FOUND`);
+  const open = source.indexOf("{", start + startAnchor.length);
+  if (open < 0) throw new Error(`${label}_OPEN_BRACE_NOT_FOUND`);
+  let depth = 0;
+  let end = -1;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = index + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) throw new Error(`${label}_CLOSE_BRACE_NOT_FOUND`);
+  return source.slice(0, start) + replacement + source.slice(end);
+}
+
 // A known phone/Zalo is a Contact Lock against asking again, not a conversation lock.
 // Only the current message that actually contains a new contact is silently captured.
 {
@@ -71,9 +93,13 @@ function replaceBetween(source, startAnchor, endAnchor, replacement, label) {
       "NO_DROP_OUTBOUND_CONTACT_GATE",
     );
 
-    const oldPageGate = `  if (state.last_page_event_at && state.last_customer_event_at && isAfterOrEqual(state.last_page_event_at, state.last_customer_event_at)) {\n    return { allowed: false, reason: "PAGE_ALREADY_REPLIED" };\n  }`;
     const newPageGate = `  const turn = decision?.input_snapshot?.turn || {};\n  const evidence = turn.responseEvidence || turn.response_evidence || {};\n  if (evidence.verifiedHuman || evidence.bot || evidence.automation || evidence.ambiguousPage) {\n    return { allowed: false, reason: "PAGE_ALREADY_REPLIED" };\n  }\n  const latestCustomerAt = Math.max(0, ...(Array.isArray(turn.customerMessages) ? turn.customerMessages : [])\n    .map((item) => Date.parse(item?.occurredAt || item?.occurred_at || ""))\n    .filter(Number.isFinite));\n  const lastPageAt = Date.parse(state.last_page_event_at || "");\n  if (latestCustomerAt > 0 && Number.isFinite(lastPageAt) && lastPageAt >= latestCustomerAt) {\n    return { allowed: false, reason: "PAGE_ALREADY_REPLIED" };\n  }`;
-    source = replaceOnce(source, oldPageGate, newPageGate, "NO_DROP_OUTBOUND_PAGE_GATE");
+    source = replaceBraceBlock(
+      source,
+      "  if (state.last_page_event_at && state.last_customer_event_at && isAfterOrEqual(",
+      newPageGate,
+      "NO_DROP_OUTBOUND_PAGE_GATE",
+    );
 
     const helperAnchor = "async function processDecision(decision, config) {";
     const helper = `function truthfulTextFallback(decision, originalText) {\n  const output = decision?.output || {};\n  const intents = Array.isArray(output.intents) ? output.intents : [];\n  if (intents.includes("price")) {\n    return output.should_request_contact === false\n      ? "Dạ mẫu này có nhiều phiên bản và mức giá khác nhau ạ. Anh/chị cho em biết thêm mã hoặc đặc điểm mẫu, bên em kiểm tra và báo đúng giá cho mình nhé."\n      : "Dạ mẫu này có nhiều phiên bản và mức giá khác nhau ạ. Anh/chị cho em xin SĐT hoặc Zalo, bên em kiểm tra đúng mẫu và gửi báo giá chi tiết cho mình nhé.";\n  }\n  const safe = String(originalText || "").trim();\n  if (safe && !/(đã gửi|gửi rồi|em gửi|gửi anh\/chị.*mẫu)/i.test(safe)) return safe;\n  return output.should_request_contact === false\n    ? "Dạ em đã nhận nhu cầu của anh/chị ạ. Anh/chị nói thêm mẫu, kích thước hoặc hạng mục cụ thể để em tư vấn đúng sản phẩm cho mình nhé."\n    : "Dạ em đã nhận nhu cầu của anh/chị ạ. Anh/chị cho em xin SĐT hoặc Zalo và nói thêm mẫu, kích thước hoặc hạng mục cụ thể để bên em tư vấn đúng sản phẩm cho mình nhé.";\n}\n\n`;
