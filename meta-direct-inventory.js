@@ -87,6 +87,20 @@ function normalizeInventory({ accountId, campaigns, adsets, ads, staticFilters }
   });
 }
 
+function mergeHistoricalMappings(staticFilters, liveAds) {
+  const merged = new Map();
+  for (const row of Array.isArray(staticFilters.ads) ? staticFilters.ads : []) {
+    const id = clean(row?.ad_id);
+    if (!id) continue;
+    merged.set(id, { ...row, inventory_source: "static_mapping_history" });
+  }
+  for (const row of liveAds) {
+    const id = clean(row?.ad_id);
+    if (id) merged.set(id, row);
+  }
+  return [...merged.values()];
+}
+
 export function createMetaDirectInventory(options = {}) {
   const graphVersion = clean(options.graphVersion || process.env.META_GRAPH_VERSION || DEFAULT_GRAPH_VERSION).replace(/^\/?/, "");
   const cache = new Map();
@@ -115,12 +129,12 @@ export function createMetaDirectInventory(options = {}) {
       .map((row) => normalizeAccountId(row.ad_account_id))
       .filter(Boolean))];
     const warnings = [];
-    const ads = [];
+    const liveAds = [];
     for (const accountId of accountIds) {
-      try { ads.push(...await accountInventory(accountId, staticFilters)); }
+      try { liveAds.push(...await accountInventory(accountId, staticFilters)); }
       catch (error) { warnings.push({ ad_account_id: accountId, error: error.message }); }
     }
-    if (!ads.length && warnings.length === accountIds.length && accountIds.length) {
+    if (!liveAds.length && warnings.length === accountIds.length && accountIds.length) {
       const error = new Error("META_INVENTORY_ALL_ACCOUNTS_FAILED");
       error.details = warnings;
       throw error;
@@ -130,7 +144,7 @@ export function createMetaDirectInventory(options = {}) {
       data: {
         pages: staticFilters.pages || [],
         ad_accounts: staticFilters.ad_accounts || [],
-        ads,
+        ads: mergeHistoricalMappings(staticFilters, liveAds),
       },
       warnings,
       source: "meta_live_inventory_plus_static_mapping",
@@ -140,4 +154,4 @@ export function createMetaDirectInventory(options = {}) {
   return { ready, filters, accountInventory };
 }
 
-export const __private__ = { normalizeInventory, normalizeAccountId, resourceUrl };
+export const __private__ = { normalizeInventory, normalizeAccountId, resourceUrl, mergeHistoricalMappings };
