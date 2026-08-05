@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T20:52:08.026Z",
+  "generated_at": "2026-08-05T20:52:53.009Z",
   "branch": "audit/v10-feature-patch-effects-20260806",
   "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   "results": [
@@ -66,13 +66,6 @@
       ],
       "stdout": "[AIGUKA] Context cards now load the selected content reliably",
       "stderr": ""
-    },
-    {
-      "patch": "patch-ai-context-center-validation.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
     },
     {
       "patch": "patch-meta-pages-messaging-scope.js",
@@ -145,75 +138,75 @@
       ],
       "stdout": "[AIGUKA] Mapping Meta midnight delivery patch applied",
       "stderr": ""
+    }
+  ],
+  "retired": [
+    {
+      "patch": "patch-ai-context-center-validation.js",
+      "classification": "retired_no_source_effect",
+      "reason": "The clean-checkout audit changed no source file; validation belongs in CI rather than Railway startup."
     },
     {
       "patch": "patch-outbound-human-takeover.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "outbound-worker.js",
+      "reason": "Only patched the permanently retired V8 outbound worker."
     },
     {
       "patch": "patch-outbound-comment-private-reply.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "outbound-worker.js",
+      "reason": "Only patched the permanently retired V8 outbound worker."
     },
     {
       "patch": "patch-outbound-binary-image-upload.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "outbound-worker.js",
+      "reason": "Only patched the permanently retired V8 outbound worker."
     },
     {
       "patch": "patch-outbound-drive-image-proxy-v2.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "outbound-worker.js",
+      "reason": "Only patched the permanently retired V8 outbound worker."
     },
     {
       "patch": "patch-outbound-marketing-notifications.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "outbound-worker.js",
+      "reason": "Only patched the permanently retired V8 outbound worker."
     },
     {
       "patch": "patch-ai-brain-internal-auth.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "ai-dispatch-worker.js, ai-follow-up-provider.js",
+      "reason": "Only patched permanently retired V8 AI dispatch/follow-up modules."
     },
     {
       "patch": "patch-ai-dispatch-profile-gender-preflight.js",
-      "classification": "missing",
-      "status": 127,
-      "changed_files": [],
-      "stderr": "file missing"
+      "classification": "retired_v8_only",
+      "target": "ai-dispatch-worker.js",
+      "reason": "Only patched the permanently retired V8 AI dispatch worker."
     }
   ],
-  "skipped": [
-    {
-      "patch": "seed-tong-hop-context.js",
-      "classification": "operational_seed",
-      "reason": "May write application data; source hash is computed but the seed is not executed by this audit.",
-      "source_files": [
-        "contexts/tong-hop.md",
-        "contexts/tong-hop-overrides.md"
-      ],
-      "content_length": 8694,
-      "seed_hash": "fc1a85ddb315d2720a1b0be64b6d23dc362c596667cc33965cb8334e93f1b68f"
-    }
-  ],
+  "operational_seed": {
+    "script": "seed-tong-hop-context.js",
+    "classification": "manual_seed_current",
+    "startup_imported": false,
+    "reason": "The production row already has this source hash; keep the script for explicit maintenance only, not every Railway boot.",
+    "source_files": [
+      "contexts/tong-hop.md",
+      "contexts/tong-hop-overrides.md"
+    ],
+    "content_length": 8694,
+    "seed_hash": "fc1a85ddb315d2720a1b0be64b6d23dc362c596667cc33965cb8334e93f1b68f"
+  },
   "summary": {
-    "total_source_patches": 21,
+    "active_source_patches": 13,
     "effective_source_patches": 13,
     "no_source_effect": 0,
     "failed": 0,
-    "missing": 8
+    "missing": 0,
+    "retired_sources": 8
   }
 }
