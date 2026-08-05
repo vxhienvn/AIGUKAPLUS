@@ -1,0 +1,236 @@
+{
+  "generated_at": "2026-08-05T20:44:02.684Z",
+  "branch": "audit/v10-feature-patch-effects-20260806",
+  "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
+  "results": [
+    {
+      "patch": "patch-learning-client.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "learning-admin-v2-client.js"
+      ],
+      "stdout": "[AIGUKA] Prompt branches and automatic reply templates separated in UI",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-bot-page-mode-save.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control-ui.js"
+      ],
+      "stdout": "[AIGUKA] Page mode preference can be saved while runtime safety policy remains enforced",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-bot-page-support-mode.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control-ui.js"
+      ],
+      "stdout": "[AIGUKA] Per-Page SUPPORT mode installed: slide on request, text takeover after configured Sale wait",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-bot-clock-24h.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control.html"
+      ],
+      "stdout": "[AIGUKA] BOT schedule now uses explicit 24-hour HH:MM inputs",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-ai-context-nav.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "ai-provider-manager.js",
+        "learning-admin-v2.html"
+      ],
+      "stdout": "[AIGUKA] Cohere native v2 strict-tools provider test installed\n[AIGUKA] AI provider admin JavaScript syntax repaired\n[AIGUKA] AI Context navigation installed",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-ai-context-card-selection.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "ai-context-center-v3.js"
+      ],
+      "stdout": "[AIGUKA] Context cards now load the selected content reliably",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-ai-context-center-validation.js",
+      "classification": "no_source_effect",
+      "status": 0,
+      "changed_files": [],
+      "stdout": "[AIGUKA] Context Center V3 browser script and primary handlers validated",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-meta-pages-messaging-scope.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "meta-facebook-login.js"
+      ],
+      "stdout": "[AIGUKA] Meta OAuth requests only valid Page and Messenger scopes",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-drive-v4-key-compat.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive V4 uses existing encrypted Google connection",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-drive-v4-api-key-folder-action.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive V4 folder button opens current Drive folder in API-key mode",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-drive-folder-tree-hierarchy.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive folder picker now renders a collapsible hierarchical tree",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-catalog-key-rename.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "public/drive-slides-v8-render.js",
+        "public/drive-slides-v8.html",
+        "src/routes/mappingCenterRoutes.js"
+      ],
+      "stdout": "[AIGUKA] Catalog key editing v2 installed with cache-safe assets",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-slide-generic-carousel.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Test slide now sends one Messenger generic carousel",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-mapping-meta-midnight-delivery.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "src/routes/mappingCenterRoutes.js"
+      ],
+      "stdout": "[AIGUKA] Mapping Meta midnight delivery patch applied",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-outbound-human-takeover.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "outbound-worker.js"
+      ],
+      "stdout": "[AIGUKA] Human takeover preflight installed before outbound Final Gate",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-outbound-comment-private-reply.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "outbound-worker.js"
+      ],
+      "stdout": "[AIGUKA] Comment-to-Messenger private reply transport installed",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-outbound-binary-image-upload.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "outbound-worker.js"
+      ],
+      "stdout": "[AIGUKA] Messenger images now use binary Attachment Upload API",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-outbound-drive-image-proxy-v2.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "outbound-worker.js"
+      ],
+      "stdout": "[AIGUKA] Messenger images now use the verified Supabase Drive image proxy URL",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-outbound-marketing-notifications.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "outbound-worker.js"
+      ],
+      "stdout": "[AIGUKA] Marketing messages now use verified notification_messages_token recipients",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-ai-brain-internal-auth.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "ai-dispatch-worker.js",
+        "ai-follow-up-provider.js"
+      ],
+      "stdout": "[AIGUKA] AI Brain internal authentication installed\n[AIGUKA] Stabilized Gemini follow-up JSON output\n[AIGUKA] Installed AI follow-up provider fallback",
+      "stderr": ""
+    },
+    {
+      "patch": "patch-ai-dispatch-profile-gender-preflight.js",
+      "classification": "effective_source_patch",
+      "status": 0,
+      "changed_files": [
+        "ai-dispatch-worker.js"
+      ],
+      "stdout": "[AIGUKA] Fresh customer profile and gender preflight installed",
+      "stderr": ""
+    }
+  ],
+  "skipped": [
+    {
+      "patch": "seed-tong-hop-context.js",
+      "classification": "operational_seed",
+      "reason": "May write application data; audited separately and never executed by this source-effect job."
+    }
+  ],
+  "summary": {
+    "total_source_patches": 21,
+    "effective_source_patches": 20,
+    "no_source_effect": 1,
+    "failed": 0,
+    "missing": 0
+  }
+}
