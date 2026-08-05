@@ -1,0 +1,161 @@
+name: Finalize V10 feature audit
+
+on:
+  push:
+    branches:
+      - audit/v10-feature-patch-effects-20260806
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/v10-feature-patch-effects-20260806
+          fetch-depth: 0
+      - name: Replace temporary audit workflow with read-only validation
+        shell: bash
+        run: |
+          cat > .github/workflows/validate-runtime-patches.yml <<'WORKFLOW'
+          name: Validate runtime patches
+
+          on:
+            push:
+              branches:
+                - main
+            pull_request:
+
+          permissions:
+            contents: read
+
+          jobs:
+            validate:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: '20'
+
+                - name: Check V10 runtime syntax
+                  run: |
+                    node --check start.js
+                    node --check v10-server-release.js
+                    node --check server-v10-final.js
+                    node --check v10-mode-compat-worker.js
+                    node --check scripts/audit-v10-feature-patches.mjs
+                    for file in \
+                      patch-drive-slide-manager-v2.js \
+                      patch-catalog-key-rename.js \
+                      patch-v7-pancake-toggle.js \
+                      patch-v7-daily-grouped.js \
+                      patch-v7-daily-staff-aligned.js \
+                      patch-v7-daily-runtime-self-contained.js \
+                      patch-v7-leads-meta-primary.js \
+                      patch-v7-leads-referral-source.js \
+                      patch-v7-null-safety.js \
+                      patch-v7-runtime-integrity.js \
+                      patch-v7-lead-meta-insights-truth.js \
+                      patch-v7-lead-reel-old-ad-attribution.js \
+                      patch-v7-lead-reel-reply-guard.js \
+                      patch-v7-split-leads-compat.js \
+                      patch-v7-split-leads-ad-performance.js
+                    do
+                      test ! -f "$file" || node --check "$file"
+                    done
+
+                - name: Verify committed server matches historical patch output
+                  run: |
+                    tmp="$(mktemp -d)"
+                    cp server-fixed.js patch-server.js patch-direct-meta-dashboard.js "$tmp/"
+                    (cd "$tmp" && node patch-server.js && node patch-direct-meta-dashboard.js)
+                    node --check "$tmp/server-fixed.js"
+                    cmp -s "$tmp/server-fixed.js" server-v10-final.js
+                    expected="$(sha256sum server-v10-final.js | awk '{print $1}')"
+                    test "$expected" = "$(tr -d '\n\r ' < server-v10-final.sha256)"
+                    grep -Fq 'installV10AdminDashboard' server-v10-final.js
+                    grep -Fq 'installReportRoutes' server-v10-final.js
+                    grep -Fq 'installAiProviderManager' server-v10-final.js
+                    grep -Fq 'installMappingCenter' server-v10-final.js
+
+                - name: Validate feature patch retirement
+                  run: |
+                    node --test tests/v10-feature-patch-retirement.test.js
+                    ! grep -F 'seed-tong-hop-context.js' start.js
+                    for file in \
+                      patch-ai-context-center-validation.js \
+                      patch-outbound-human-takeover.js \
+                      patch-outbound-comment-private-reply.js \
+                      patch-outbound-binary-image-upload.js \
+                      patch-outbound-drive-image-proxy-v2.js \
+                      patch-outbound-marketing-notifications.js \
+                      patch-ai-brain-internal-auth.js \
+                      patch-ai-dispatch-profile-gender-preflight.js
+                    do
+                      test ! -e "$file"
+                      ! grep -F "$file" start.js
+                    done
+
+                - name: Confirm retired runtime paths cannot restart
+                  run: |
+                    node - <<'NODE'
+                    const fs = require('fs');
+                    const source = fs.readFileSync('start.js', 'utf8');
+                    const forbidden = [
+                      'patch-v7-pancake-classifier.js',
+                      'patch-v7-pancake-history.js',
+                      'patch-v7-pancake-tag-parser.js',
+                      'startDetached("./webhook-inbox-worker.js")',
+                      'startDetached("./ai-dispatch-worker.js")',
+                      'startDetached("./outbound-worker.js")',
+                      'startDetached("./meta-profile-sync-worker.js")',
+                      'startDetached("./v8-v9-mode-sync-worker.js")',
+                      'safeImport("./patch-server.js"',
+                      'safeImport("./patch-direct-meta-dashboard.js"',
+                      'safeImport("./server-fixed.js"',
+                    ];
+                    for (const token of forbidden) {
+                      if (source.includes(token)) throw new Error(`RETIRED_RUNTIME_PATH_ACTIVE:${token}`);
+                    }
+                    for (const required of [
+                      'await safeImport("./v10-server-release.js", true)',
+                      'startDetached("./v10-mode-compat-worker.js")',
+                    ]) {
+                      if (!source.includes(required)) throw new Error(`REQUIRED_RUNTIME_PATH_MISSING:${required}`);
+                    }
+                    NODE
+
+                - name: Smoke isolated slide and catalog patches
+                  run: |
+                    cp drive-slide-manager.js /tmp/drive-slide-manager.js
+                    node patch-drive-slide-manager-v2.js
+                    node --check drive-slide-manager.js
+                    mv /tmp/drive-slide-manager.js drive-slide-manager.js
+
+                    cp public/drive-slides-v8.html /tmp/drive-slides-v8.html
+                    cp public/drive-slides-v8-render.js /tmp/drive-slides-v8-render.js
+                    cp src/routes/mappingCenterRoutes.js /tmp/mappingCenterRoutes.js
+                    node patch-catalog-key-rename.js
+                    node --check public/drive-slides-v8-render.js
+                    node --check src/routes/mappingCenterRoutes.js
+                    mv /tmp/drive-slides-v8.html public/drive-slides-v8.html
+                    mv /tmp/drive-slides-v8-render.js public/drive-slides-v8-render.js
+                    mv /tmp/mappingCenterRoutes.js src/routes/mappingCenterRoutes.js
+          WORKFLOW
+          rm -f .github/workflows/finalize-v10-feature-audit.yml
+      - name: Commit finalized workflows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/validate-runtime-patches.yml
+          git rm --cached --ignore-unmatch .github/workflows/finalize-v10-feature-audit.yml || true
+          git add -u .github/workflows/finalize-v10-feature-audit.yml
+          if git diff --cached --quiet; then
+            echo "Workflows already finalized"
+            exit 0
+          fi
+          git commit -m "Finalize V10 feature patch validation"
+          git push origin HEAD:audit/v10-feature-patch-effects-20260806
