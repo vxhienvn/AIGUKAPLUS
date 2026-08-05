@@ -20,11 +20,11 @@ test("release establishes conservative provider scheduling defaults", () => {
 
 test("final provider scheduler does not claim when no AI provider is ready", () => {
   const source = fs.readFileSync(new URL("../v10-ai-worker-final.js", import.meta.url), "utf8");
-  const availability = source.indexOf("const availability = providerAvailability(providerRows, now)");
-  const noProvider = source.indexOf("if (!availability.available.length)");
-  const process = source.indexOf("processOne(ready[0], availability.available");
-  assert.ok(availability >= 0 && noProvider > availability && process > noProvider);
-  assert.match(source, /scheduleWithoutClaim/);
+  const availability = source.indexOf("const availability = providerAvailability(providerRows, Date.now())");
+  const noProvider = source.indexOf("if (!availability.available.length)", availability);
+  const wait = source.indexOf("scheduleWithoutClaim(row, availability.nextAvailableAt", noProvider);
+  const process = source.indexOf("processOne(row, availability.available, snapshot)", noProvider);
+  assert.ok(availability >= 0 && noProvider > availability && wait > noProvider && process > wait);
   assert.match(source, /consumeAttempt: !transientOnly/);
   assert.match(source, /operational_fallback_enabled: false/);
   assert.match(source, /providerSettings\(provider\)\.max_input_chars/);
