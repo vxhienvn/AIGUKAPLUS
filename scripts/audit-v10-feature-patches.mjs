@@ -29,14 +29,35 @@ const PATCHES = [
   "patch-ai-dispatch-profile-gender-preflight.js",
 ];
 
-const SKIPPED = [{
-  patch: "seed-tong-hop-context.js",
-  classification: "operational_seed",
-  reason: "May write application data; audited separately and never executed by this source-effect job.",
-}];
+function hashText(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
 
-function command(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+function seedAudit() {
+  const basePath = path.join(ROOT, "contexts", "tong-hop.md");
+  const overridePath = path.join(ROOT, "contexts", "tong-hop-overrides.md");
+  if (!fs.existsSync(basePath) || !fs.existsSync(overridePath)) {
+    return {
+      patch: "seed-tong-hop-context.js",
+      classification: "operational_seed_missing_source",
+      reason: "One or more context source files are missing.",
+    };
+  }
+  const base = fs.readFileSync(basePath, "utf8").trim();
+  const overrides = fs.readFileSync(overridePath, "utf8").trim();
+  const content = `${base}\n\n${overrides}`;
+  return {
+    patch: "seed-tong-hop-context.js",
+    classification: "operational_seed",
+    reason: "May write application data; source hash is computed but the seed is not executed by this audit.",
+    source_files: ["contexts/tong-hop.md", "contexts/tong-hop-overrides.md"],
+    content_length: content.length,
+    seed_hash: hashText(content),
+  };
+}
+
+function command(commandName, args, options = {}) {
+  const result = spawnSync(commandName, args, {
     cwd: ROOT,
     encoding: "utf8",
     env: {
@@ -113,7 +134,7 @@ const report = {
   branch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || null,
   method: "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   results,
-  skipped: SKIPPED,
+  skipped: [seedAudit()],
   summary: {
     total_source_patches: results.length,
     effective_source_patches: results.filter((item) => item.classification === "effective_source_patch").length,
@@ -129,3 +150,4 @@ console.log(JSON.stringify(report.summary));
 for (const item of results) {
   console.log(`${item.classification.padEnd(24)} ${item.patch} ${item.changed_files.join(", ")}`);
 }
+console.log(`operational_seed_hash      ${report.skipped[0].seed_hash || "unavailable"}`);
