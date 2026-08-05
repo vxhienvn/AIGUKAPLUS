@@ -66,9 +66,9 @@ jobs:
             (cd "$tmp" && node "./$patch")
           done
           node --check "$tmp/v10-ai-worker-v2.js"
-          grep -q 'v10_ai_quota_aware_balancer_v6' "$tmp/v10-ai-worker-v2.js"
-          grep -q 'AIGUKA_V10_DECISION_INTEGRITY_V9' "$tmp/v10-ai-worker-v2.js"
-          grep -q 'v10_ai_quality_guard_v12' "$tmp/v10-ai-worker-v2.js"
+          grep -Fq 'providerSettings(provider).max_input_chars' "$tmp/v10-ai-worker-v2.js"
+          grep -Fq 'AIGUKA_V10_DECISION_INTEGRITY_V9' "$tmp/v10-ai-worker-v2.js"
+          grep -Fq 'v10_ai_quality_guard_v12' "$tmp/v10-ai-worker-v2.js"
 
       - name: Validate contact acknowledgement migration
         run: |
