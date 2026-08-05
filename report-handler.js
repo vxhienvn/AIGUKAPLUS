@@ -9,6 +9,8 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
     "content-type": "application/json",
     "x-aiguka-railway-test": "enabled",
   });
+  const coreBase = () => String(process.env.AIGUKA_V9_CORE_URL || "").replace(/\/$/, "");
+  const coreKey = () => String(process.env.AIGUKA_V9_CORE_SERVICE_ROLE_KEY || "");
 
   async function rpc(name, rpcArgs = {}) {
     if (!publishableKey) throw Error("MISSING_SUPABASE_PUBLISHABLE_KEY");
@@ -25,6 +27,25 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
     catch { data = { raw: raw.slice(0, 500) }; }
     if (!response.ok) throw Error(data?.message || data?.error || `RPC_HTTP_${response.status}`);
     return data;
+  }
+
+  async function coreGet(path) {
+    if (!coreBase() || !coreKey()) throw new Error("CORE_REPORT_ENRICHMENT_NOT_CONFIGURED");
+    const response = await fetch(`${coreBase()}/rest/v1/${path}`, {
+      headers: {
+        apikey: coreKey(),
+        authorization: `Bearer ${coreKey()}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(25_000),
+      cache: "no-store",
+    });
+    const raw = await response.text();
+    let data;
+    try { data = raw ? JSON.parse(raw) : null; }
+    catch { data = { raw: raw.slice(0, 500) }; }
+    if (!response.ok) throw new Error(data?.message || data?.error || data?.hint || `CORE_HTTP_${response.status}`);
+    return Array.isArray(data) ? data : [];
   }
 
   function args(query, limit = null) {
@@ -69,6 +90,98 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
   async function stored(type, query, limit = null) {
     const name = type === "ads" ? "v8_report_ads_test" : type === "daily" ? "v8_report_daily_test" : "v8_report_leads_test";
     return rpc(name, args(query, limit));
+  }
+
+  function chunks(values, size = 40) {
+    const result = [];
+    for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+    return result;
+  }
+
+  function inFilter(values) {
+    const quoted = values.map((value) => `"${String(value).replaceAll('"', '')}"`).join(",");
+    return `in.(${encodeURIComponent(quoted)})`;
+  }
+
+  async function enrichLeadsFromCore(report) {
+    const rows = Array.isArray(report?.data) ? report.data : [];
+    if (!rows.length || !coreBase() || !coreKey()) {
+      return {
+        ...report,
+        source: report?.source || "supabase_customer_history",
+        customer_data_source: "reporting_history",
+        accounts: [],
+      };
+    }
+    const ids = [...new Set(rows.map((row) => String(row.customer_id || row.sender_id || "").trim()).filter(Boolean))];
+    const customers = [];
+    const contacts = [];
+    const warnings = [...(Array.isArray(report?.warnings) ? report.warnings : [])];
+    try {
+      for (const batch of chunks(ids)) {
+        const filter = inFilter(batch);
+        const [customerRows, contactRows] = await Promise.all([
+          coreGet(`v9_customers?select=page_id,customer_id,display_name,gender,preferred_salutation,profile&customer_id=${filter}`),
+          coreGet(`v9_contacts?select=page_id,customer_id,contact_type,contact_value,normalized_value,captured_at&customer_id=${filter}&order=captured_at.desc`),
+        ]);
+        customers.push(...customerRows);
+        contacts.push(...contactRows);
+      }
+    } catch (error) {
+      warnings.push(`CORE_LEAD_ENRICHMENT:${error.message}`);
+      return {
+        ...report,
+        source: report?.source || "supabase_customer_history",
+        customer_data_source: "reporting_history",
+        warnings,
+        accounts: [],
+      };
+    }
+
+    const customerMap = new Map();
+    for (const row of customers) customerMap.set(`${row.page_id}:${row.customer_id}`, row);
+    const contactMap = new Map();
+    for (const row of contacts) {
+      const key = `${row.page_id}:${row.customer_id}`;
+      const current = contactMap.get(key) || {};
+      const type = String(row.contact_type || "").toLowerCase();
+      const value = String(row.contact_value || row.normalized_value || "").trim();
+      if (!value) continue;
+      if (type === "phone" && !current.phone) current.phone = value;
+      if (type === "zalo" && !current.zalo) current.zalo = value;
+      contactMap.set(key, current);
+    }
+
+    let enrichedCount = 0;
+    const data = rows.map((row) => {
+      const customerId = String(row.customer_id || row.sender_id || "").trim();
+      const key = `${row.page_id}:${customerId}`;
+      const customer = customerMap.get(key) || {};
+      const contact = contactMap.get(key) || {};
+      const name = String(customer.display_name || "").trim();
+      if (name || contact.phone || contact.zalo) enrichedCount += 1;
+      return {
+        ...row,
+        customer_name: name || row.customer_name,
+        phone: contact.phone || row.phone,
+        zalo: contact.zalo || row.zalo,
+        has_contact: Boolean(contact.phone || contact.zalo || row.has_contact || row.phone || row.zalo),
+        is_hot_lead: Boolean(contact.phone || contact.zalo || row.is_hot_lead),
+        gender: customer.gender || row.gender || null,
+        preferred_salutation: customer.preferred_salutation || row.preferred_salutation || null,
+        customer_profile_source: name ? "v10_core_live" : row.customer_profile_source || null,
+        contact_value_source: contact.phone || contact.zalo ? "v10_core_live" : row.contact_value_source || null,
+      };
+    });
+    return {
+      ...report,
+      data,
+      source: "core_live_plus_reporting_history",
+      customer_data_source: "v10_core_live",
+      core_enriched_count: enrichedCount,
+      warnings,
+      accounts: [],
+    };
   }
 
   async function liveAds(query) {
@@ -133,7 +246,7 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
     if (type === "daily") return liveDaily(query);
     const defaultLimit = limit ?? (!String(query.limit || "").trim() ? 250 : null);
     const result = await stored("leads", query, defaultLimit);
-    return { ...result, source: result.source || "supabase_customer_history", accounts: [] };
+    return enrichLeadsFromCore({ ...result, source: result.source || "supabase_customer_history" });
   }
 
   function sourceLabel(row = {}) {
@@ -220,9 +333,10 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
       if (action === "health") return res.json({
         ok: true,
         service: "aiguka-v10-direct-meta-report",
-        version: 4,
+        version: 5,
         meta_direct_ready: meta.ready(),
-        customer_history_source: "supabase",
+        customer_history_source: coreBase() && coreKey() ? "core_live_plus_reporting_history" : "reporting_history",
+        raw_contact_replication: false,
       });
       if (action === "filters") return res.json(await rpc("v8_report_filters_test"));
       if (action === "summary") {
@@ -258,5 +372,5 @@ export function installReportRoutes(app, { supabaseUrl, publishableKey }) {
     }
   });
 
-  return { rpc, liveAds, liveDaily };
+  return { rpc, liveAds, liveDaily, enrichLeadsFromCore };
 }
