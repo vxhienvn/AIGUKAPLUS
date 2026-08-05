@@ -73,6 +73,7 @@ for (const patch of [
 ]) await safeImport(patch);
 
 await safeImport("./patch-server.js");
+await safeImport("./patch-direct-meta-dashboard.js", true);
 await safeImport("./patch-outbound-human-takeover.js");
 await safeImport("./patch-outbound-comment-private-reply.js");
 await safeImport("./patch-outbound-binary-image-upload.js");
