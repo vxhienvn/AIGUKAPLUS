@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T20:50:49.438Z",
+  "generated_at": "2026-08-05T20:51:46.965Z",
   "branch": "audit/v10-feature-patch-effects-20260806",
   "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   "results": [
@@ -155,56 +155,45 @@
     },
     {
       "patch": "patch-outbound-comment-private-reply.js",
-      "classification": "failed",
-      "status": 1,
+      "classification": "missing",
+      "status": 127,
       "changed_files": [],
-      "stdout": "",
-      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-comment-private-reply.js:23\n  if (!source.includes(oldFields)) throw new Error(\"OUTBOUND_COMMENT_FIELDS_ANCHOR_NOT_FOUND\");\n                                         ^\n\nError: OUTBOUND_COMMENT_FIELDS_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-comment-private-reply.js:23:42\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
+      "stderr": "file missing"
     },
     {
       "patch": "patch-outbound-binary-image-upload.js",
-      "classification": "failed",
-      "status": 1,
+      "classification": "missing",
+      "status": 127,
       "changed_files": [],
-      "stdout": "",
-      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-binary-image-upload.js:171\n  if (!source.includes(oldBlock)) throw new Error(\"OUTBOUND_IMAGE_UPLOAD_ANCHOR_NOT_FOUND\");\n                                        ^\n\nError: OUTBOUND_IMAGE_UPLOAD_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-binary-image-upload.js:171:41\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
+      "stderr": "file missing"
     },
     {
       "patch": "patch-outbound-drive-image-proxy-v2.js",
-      "classification": "failed",
-      "status": 1,
+      "classification": "missing",
+      "status": 127,
       "changed_files": [],
-      "stdout": "",
-      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-drive-image-proxy-v2.js:42\n  if (!source.includes(oldImageBlock)) throw new Error(\"OUTBOUND_DRIVE_PROXY_IMAGE_ANCHOR_NOT_FOUND\");\n                                             ^\n\nError: OUTBOUND_DRIVE_PROXY_IMAGE_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-drive-image-proxy-v2.js:42:46\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
+      "stderr": "file missing"
     },
     {
       "patch": "patch-outbound-marketing-notifications.js",
-      "classification": "failed",
-      "status": 1,
+      "classification": "missing",
+      "status": 127,
       "changed_files": [],
-      "stdout": "",
-      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-marketing-notifications.js:13\n  if (!source.includes(oldVersion)) throw new Error(\"OUTBOUND_MARKETING_VERSION_ANCHOR_NOT_FOUND\");\n                                          ^\n\nError: OUTBOUND_MARKETING_VERSION_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-marketing-notifications.js:13:43\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
+      "stderr": "file missing"
     },
     {
       "patch": "patch-ai-brain-internal-auth.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "ai-dispatch-worker.js",
-        "ai-follow-up-provider.js"
-      ],
-      "stdout": "[AIGUKA] AI Brain internal authentication installed\n[AIGUKA] Stabilized Gemini follow-up JSON output\n[AIGUKA] Installed AI follow-up provider fallback",
-      "stderr": ""
+      "classification": "missing",
+      "status": 127,
+      "changed_files": [],
+      "stderr": "file missing"
     },
     {
       "patch": "patch-ai-dispatch-profile-gender-preflight.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "ai-dispatch-worker.js"
-      ],
-      "stdout": "[AIGUKA] Fresh customer profile and gender preflight installed",
-      "stderr": ""
+      "classification": "missing",
+      "status": 127,
+      "changed_files": [],
+      "stderr": "file missing"
     }
   ],
   "skipped": [
@@ -222,9 +211,9 @@
   ],
   "summary": {
     "total_source_patches": 21,
-    "effective_source_patches": 15,
+    "effective_source_patches": 13,
     "no_source_effect": 0,
-    "failed": 4,
-    "missing": 2
+    "failed": 0,
+    "missing": 8
   }
 }
