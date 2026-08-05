@@ -7,45 +7,9 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  materialize-final-server:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'refactor/v10-final-server-20260806' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refactor/v10-final-server-20260806
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Build exact production server
-        run: |
-          cp server-fixed.js /tmp/server-fixed-base.js
-          node patch-server.js
-          node patch-direct-meta-dashboard.js
-          cp server-fixed.js server-v10-final.js
-          mv /tmp/server-fixed-base.js server-fixed.js
-          node --check server-v10-final.js
-          grep -Fq 'installV10AdminDashboard' server-v10-final.js
-          grep -Fq 'installReportRoutes' server-v10-final.js
-          grep -Fq 'installAiProviderManager' server-v10-final.js
-          grep -Fq 'installMappingCenter' server-v10-final.js
-          sha256sum server-v10-final.js | awk '{print $1}' > server-v10-final.sha256
-      - name: Commit generated server
-        run: |
-          if test -z "$(git status --porcelain -- server-v10-final.js server-v10-final.sha256)"; then
-            echo "Final server already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server-v10-final.js server-v10-final.sha256
-          git commit -m "Materialize final V10 server"
-          git push origin HEAD:refactor/v10-final-server-20260806
-
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -54,9 +18,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Check runtime and active patch syntax
+      - name: Check V10 runtime syntax
         run: |
           node --check start.js
+          node --check v10-server-release.js
+          node --check server-v10-final.js
           node --check v10-mode-compat-worker.js
           for file in \
             patch-drive-slide-manager-v2.js \
@@ -78,6 +44,20 @@ jobs:
             test ! -f "$file" || node --check "$file"
           done
 
+      - name: Verify committed server matches historical patch output
+        run: |
+          tmp="$(mktemp -d)"
+          cp server-fixed.js patch-server.js patch-direct-meta-dashboard.js "$tmp/"
+          (cd "$tmp" && node patch-server.js && node patch-direct-meta-dashboard.js)
+          node --check "$tmp/server-fixed.js"
+          cmp -s "$tmp/server-fixed.js" server-v10-final.js
+          expected="$(sha256sum server-v10-final.js | awk '{print $1}')"
+          test "$expected" = "$(tr -d '\n\r ' < server-v10-final.sha256)"
+          grep -Fq 'installV10AdminDashboard' server-v10-final.js
+          grep -Fq 'installReportRoutes' server-v10-final.js
+          grep -Fq 'installAiProviderManager' server-v10-final.js
+          grep -Fq 'installMappingCenter' server-v10-final.js
+
       - name: Confirm retired runtime paths cannot restart
         run: |
           node - <<'NODE'
@@ -92,6 +72,9 @@ jobs:
             'startDetached("./outbound-worker.js")',
             'startDetached("./meta-profile-sync-worker.js")',
             'startDetached("./v8-v9-mode-sync-worker.js")',
+            'safeImport("./patch-server.js"',
+            'safeImport("./patch-direct-meta-dashboard.js"',
+            'safeImport("./server-fixed.js"',
           ];
           for (const token of forbidden) {
             if (source.includes(token)) throw new Error(`RETIRED_RUNTIME_PATH_ACTIVE:${token}`);
@@ -105,8 +88,11 @@ jobs:
           ]) {
             if (fs.existsSync(file)) throw new Error(`RETIRED_FILE_STILL_PRESENT:${file}`);
           }
-          if (!source.includes('startDetached("./v10-mode-compat-worker.js")')) {
-            throw new Error('V10_MODE_COMPAT_NOT_STARTED');
+          for (const required of [
+            'await safeImport("./v10-server-release.js", true)',
+            'startDetached("./v10-mode-compat-worker.js")',
+          ]) {
+            if (!source.includes(required)) throw new Error(`REQUIRED_RUNTIME_PATH_MISSING:${required}`);
           }
           NODE
 
@@ -142,9 +128,7 @@ jobs:
               throw new Error(`PARTIAL_LEGACY_RUNTIME_CHAIN:${names.filter((_, i) => positions[i] < 0).join(',')}`);
             }
             for (let i = 1; i < positions.length; i += 1) {
-              if (positions[i] <= positions[i - 1]) {
-                throw new Error(`INVALID_RUNTIME_PATCH_ORDER:${names[i]}`);
-              }
+              if (positions[i] <= positions[i - 1]) throw new Error(`INVALID_RUNTIME_PATCH_ORDER:${names[i]}`);
             }
           }
           NODE
