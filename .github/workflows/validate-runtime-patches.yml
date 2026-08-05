@@ -6,7 +6,46 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
+  materialize-final-server:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'refactor/v10-final-server-20260806' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/v10-final-server-20260806
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build exact production server
+        run: |
+          cp server-fixed.js /tmp/server-fixed-base.js
+          node patch-server.js
+          node patch-direct-meta-dashboard.js
+          cp server-fixed.js server-v10-final.js
+          mv /tmp/server-fixed-base.js server-fixed.js
+          node --check server-v10-final.js
+          grep -Fq 'installV10AdminDashboard' server-v10-final.js
+          grep -Fq 'installReportRoutes' server-v10-final.js
+          grep -Fq 'installAiProviderManager' server-v10-final.js
+          grep -Fq 'installMappingCenter' server-v10-final.js
+          sha256sum server-v10-final.js | awk '{print $1}' > server-v10-final.sha256
+      - name: Commit generated server
+        run: |
+          if test -z "$(git status --porcelain -- server-v10-final.js server-v10-final.sha256)"; then
+            echo "Final server already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server-v10-final.js server-v10-final.sha256
+          git commit -m "Materialize final V10 server"
+          git push origin HEAD:refactor/v10-final-server-20260806
+
   validate:
     runs-on: ubuntu-latest
     steps:
