@@ -11,6 +11,7 @@ import { enhanceV10DashboardHtml, __private__ as adminShellPrivate } from "../da
 
 const reportEntrypoint = fs.readFileSync("report-handler.js", "utf8");
 const reportHandler = fs.readFileSync("report-handler-v10.js", "utf8");
+const reportSources = fs.readFileSync("v10-report-sources.js", "utf8");
 const start = fs.readFileSync("start.js", "utf8");
 
 test("direct Meta normalizer keeps live spend and customer merge separate", () => {
@@ -68,7 +69,8 @@ test("report entrypoint has one V10 implementation with direct sources", () => {
   assert.match(reportHandler, /createMetaDirectInventory/);
   assert.match(reportHandler, /createV10ReportSources/);
   assert.match(reportHandler, /meta_live_plus_core_customer_metrics/);
-  assert.match(reportHandler, /v10_report_customer_metrics/);
+  assert.match(reportSources, /v10_report_customer_metrics/);
+  assert.match(reportSources, /v10_report_filter_registry/);
   assert.match(reportHandler, /stored\("leads"/);
   assert.match(reportHandler, /snapshot_workers_required: false/);
 });
