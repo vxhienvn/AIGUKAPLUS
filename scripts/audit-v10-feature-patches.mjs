@@ -5,6 +5,9 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "docs", "V10_FEATURE_PATCH_EFFECTS.json");
+
+// These are the only feature-source patches still started by V10. Every entry changed
+// an active management/Mapping/Drive module in the clean-checkout audit.
 const PATCHES = [
   "patch-learning-client.js",
   "patch-bot-page-mode-save.js",
@@ -12,7 +15,6 @@ const PATCHES = [
   "patch-bot-clock-24h.js",
   "patch-ai-context-nav.js",
   "patch-ai-context-card-selection.js",
-  "patch-ai-context-center-validation.js",
   "patch-meta-pages-messaging-scope.js",
   "patch-drive-v4-key-compat.js",
   "patch-drive-v4-api-key-folder-action.js",
@@ -20,13 +22,56 @@ const PATCHES = [
   "patch-catalog-key-rename.js",
   "patch-slide-generic-carousel.js",
   "patch-mapping-meta-midnight-delivery.js",
-  "patch-outbound-human-takeover.js",
-  "patch-outbound-comment-private-reply.js",
-  "patch-outbound-binary-image-upload.js",
-  "patch-outbound-drive-image-proxy-v2.js",
-  "patch-outbound-marketing-notifications.js",
-  "patch-ai-brain-internal-auth.js",
-  "patch-ai-dispatch-profile-gender-preflight.js",
+];
+
+const RETIRED = [
+  {
+    patch: "patch-ai-context-center-validation.js",
+    classification: "retired_no_source_effect",
+    reason: "The clean-checkout audit changed no source file; validation belongs in CI rather than Railway startup.",
+  },
+  {
+    patch: "patch-outbound-human-takeover.js",
+    classification: "retired_v8_only",
+    target: "outbound-worker.js",
+    reason: "Only patched the permanently retired V8 outbound worker.",
+  },
+  {
+    patch: "patch-outbound-comment-private-reply.js",
+    classification: "retired_v8_only",
+    target: "outbound-worker.js",
+    reason: "Only patched the permanently retired V8 outbound worker.",
+  },
+  {
+    patch: "patch-outbound-binary-image-upload.js",
+    classification: "retired_v8_only",
+    target: "outbound-worker.js",
+    reason: "Only patched the permanently retired V8 outbound worker.",
+  },
+  {
+    patch: "patch-outbound-drive-image-proxy-v2.js",
+    classification: "retired_v8_only",
+    target: "outbound-worker.js",
+    reason: "Only patched the permanently retired V8 outbound worker.",
+  },
+  {
+    patch: "patch-outbound-marketing-notifications.js",
+    classification: "retired_v8_only",
+    target: "outbound-worker.js",
+    reason: "Only patched the permanently retired V8 outbound worker.",
+  },
+  {
+    patch: "patch-ai-brain-internal-auth.js",
+    classification: "retired_v8_only",
+    target: "ai-dispatch-worker.js, ai-follow-up-provider.js",
+    reason: "Only patched permanently retired V8 AI dispatch/follow-up modules.",
+  },
+  {
+    patch: "patch-ai-dispatch-profile-gender-preflight.js",
+    classification: "retired_v8_only",
+    target: "ai-dispatch-worker.js",
+    reason: "Only patched the permanently retired V8 AI dispatch worker.",
+  },
 ];
 
 function hashText(value) {
@@ -38,8 +83,9 @@ function seedAudit() {
   const overridePath = path.join(ROOT, "contexts", "tong-hop-overrides.md");
   if (!fs.existsSync(basePath) || !fs.existsSync(overridePath)) {
     return {
-      patch: "seed-tong-hop-context.js",
-      classification: "operational_seed_missing_source",
+      script: "seed-tong-hop-context.js",
+      classification: "manual_seed_missing_source",
+      startup_imported: false,
       reason: "One or more context source files are missing.",
     };
   }
@@ -47,9 +93,10 @@ function seedAudit() {
   const overrides = fs.readFileSync(overridePath, "utf8").trim();
   const content = `${base}\n\n${overrides}`;
   return {
-    patch: "seed-tong-hop-context.js",
-    classification: "operational_seed",
-    reason: "May write application data; source hash is computed but the seed is not executed by this audit.",
+    script: "seed-tong-hop-context.js",
+    classification: "manual_seed_current",
+    startup_imported: false,
+    reason: "The production row already has this source hash; keep the script for explicit maintenance only, not every Railway boot.",
     source_files: ["contexts/tong-hop.md", "contexts/tong-hop-overrides.md"],
     content_length: content.length,
     seed_hash: hashText(content),
@@ -134,13 +181,15 @@ const report = {
   branch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || null,
   method: "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   results,
-  skipped: [seedAudit()],
+  retired: RETIRED,
+  operational_seed: seedAudit(),
   summary: {
-    total_source_patches: results.length,
+    active_source_patches: results.length,
     effective_source_patches: results.filter((item) => item.classification === "effective_source_patch").length,
     no_source_effect: results.filter((item) => item.classification === "no_source_effect").length,
     failed: results.filter((item) => item.classification === "failed").length,
     missing: results.filter((item) => item.classification === "missing").length,
+    retired_sources: RETIRED.length,
   },
 };
 
@@ -150,4 +199,5 @@ console.log(JSON.stringify(report.summary));
 for (const item of results) {
   console.log(`${item.classification.padEnd(24)} ${item.patch} ${item.changed_files.join(", ")}`);
 }
-console.log(`operational_seed_hash      ${report.skipped[0].seed_hash || "unavailable"}`);
+console.log(`retired_sources            ${RETIRED.length}`);
+console.log(`manual_seed_hash           ${report.operational_seed.seed_hash || "unavailable"}`);
