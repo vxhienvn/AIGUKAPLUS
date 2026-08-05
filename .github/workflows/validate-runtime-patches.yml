@@ -7,9 +7,34 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  audit-feature-patches:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'audit/v10-feature-patch-effects-20260806' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/v10-feature-patch-effects-20260806
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Audit sequential feature patch source effects
+        run: node scripts/audit-v10-feature-patches.mjs
+      - name: Commit audit report
+        run: |
+          if test -z "$(git status --porcelain -- docs/V10_FEATURE_PATCH_EFFECTS.json)"; then
+            echo "Feature patch audit report already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/V10_FEATURE_PATCH_EFFECTS.json
+          git commit -m "Record V10 feature patch effects"
+          git push origin HEAD:audit/v10-feature-patch-effects-20260806
+
   validate:
     runs-on: ubuntu-latest
     steps:
