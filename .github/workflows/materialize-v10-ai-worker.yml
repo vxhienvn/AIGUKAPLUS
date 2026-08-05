@@ -62,7 +62,7 @@ jobs:
           sha256sum v10-ai-worker-final.js | awk '{print $1}' > v10-ai-worker-final.sha256
       - name: Commit generated worker
         run: |
-          if git diff --quiet -- v10-ai-worker-final.js v10-ai-worker-final.sha256; then
+          if test -z "$(git status --porcelain -- v10-ai-worker-final.js v10-ai-worker-final.sha256)"; then
             echo "Final worker already current"
             exit 0
           fi
