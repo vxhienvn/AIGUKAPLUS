@@ -4,7 +4,7 @@ const CORE_BASE = String(process.env.AIGUKA_V9_CORE_URL || "").replace(/\/$/, ""
 const CORE_KEY = String(process.env.AIGUKA_V9_CORE_SERVICE_ROLE_KEY || "");
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || "v23.0").replace(/^\/?/, "");
 const WORKER = "aiguka-v10-customer-profile";
-const VERSION = "v10_customer_profile_v1";
+const VERSION = "v10_customer_profile_v2";
 const POLL_MS = Math.max(15_000, Number(process.env.AIGUKA_V10_PROFILE_POLL_MS || 20_000));
 const BATCH_SIZE = Math.max(1, Math.min(15, Number(process.env.AIGUKA_V10_PROFILE_BATCH || 5)));
 const RETRY_MS = Math.max(15 * 60_000, Number(process.env.AIGUKA_V10_PROFILE_RETRY_MS || 6 * 60 * 60_000));
@@ -103,14 +103,44 @@ function normalizeGender(value) {
   return null;
 }
 
+function applyParticipantName(profile, participantName) {
+  if (displayName(profile) || !clean(participantName)) return profile;
+  const parts = clean(participantName).split(/\s+/).filter(Boolean);
+  return {
+    ...profile,
+    first_name: parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || null,
+    last_name: parts.length > 1 ? parts.at(-1) : null,
+  };
+}
+
+async function participantName(pageId, customerId, token) {
+  try {
+    const data = await graph(`${pageId}/conversations`, token, {
+      platform: "messenger",
+      user_id: customerId,
+      fields: "participants",
+      limit: 1,
+    });
+    const participants = data?.data?.[0]?.participants?.data || [];
+    return clean(participants.find((item) => String(item.id) === String(customerId))?.name) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchProfile(pageId, customerId) {
   const token = await tokenForPage(pageId);
   let profile = {};
   try {
-    profile = await graph(customerId, token, { fields: "id,name,first_name,last_name,profile_pic,locale,gender" });
+    profile = await graph(customerId, token, { fields: "first_name,last_name,profile_pic,locale,gender" });
   } catch {
-    profile = await graph(customerId, token, { fields: "id,name,first_name,last_name,profile_pic,locale" });
+    try {
+      profile = await graph(customerId, token, { fields: "first_name,last_name,profile_pic,locale" });
+    } catch {
+      profile = {};
+    }
   }
+  if (!displayName(profile)) profile = applyParticipantName(profile, await participantName(pageId, customerId, token));
   const name = displayName(profile);
   if (!name) throw new Error("META_PROFILE_NAME_UNAVAILABLE");
   return { profile, name, gender: normalizeGender(profile.gender) };
@@ -237,6 +267,6 @@ export async function startV10CustomerProfileWorker() {
   tick().catch(() => {});
 }
 
-export const __private__ = { displayName, normalizeGender, retryAt };
+export const __private__ = { displayName, normalizeGender, applyParticipantName, retryAt };
 
 await startV10CustomerProfileWorker();
