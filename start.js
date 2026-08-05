@@ -52,8 +52,8 @@ try {
   console.error("[AIGUKA] Could not load saved Meta OAuth connection:", error.message);
 }
 
-// Active feature-source compatibility patches. These patch feature modules only;
-// the Railway HTTP server and AI worker are committed checksummed artifacts.
+// Effective feature-source compatibility patches only. Audit evidence is recorded in
+// docs/V10_FEATURE_PATCH_EFFECTS.json. V8-only patches and no-op validators are retired.
 for (const patch of [
   "./patch-learning-client.js",
   "./patch-bot-page-mode-save.js",
@@ -61,24 +61,17 @@ for (const patch of [
   "./patch-bot-clock-24h.js",
   "./patch-ai-context-nav.js",
   "./patch-ai-context-card-selection.js",
-  "./patch-ai-context-center-validation.js",
   "./patch-meta-pages-messaging-scope.js",
   "./patch-drive-v4-key-compat.js",
   "./patch-drive-v4-api-key-folder-action.js",
   "./patch-drive-folder-tree-hierarchy.js",
   "./patch-catalog-key-rename.js",
   "./patch-slide-generic-carousel.js",
-  "./seed-tong-hop-context.js",
   "./patch-mapping-meta-midnight-delivery.js",
 ]) await safeImport(patch);
 
-await safeImport("./patch-outbound-human-takeover.js");
-await safeImport("./patch-outbound-comment-private-reply.js");
-await safeImport("./patch-outbound-binary-image-upload.js");
-await safeImport("./patch-outbound-drive-image-proxy-v2.js");
-await safeImport("./patch-outbound-marketing-notifications.js");
-await safeImport("./patch-ai-brain-internal-auth.js");
-await safeImport("./patch-ai-dispatch-profile-gender-preflight.js");
+// tong_hop_aiguka_aicake is already seeded with the current source hash. The seeder is
+// retained as an explicit maintenance command, not a database read/write on every boot.
 
 // Bind the checksummed Railway HTTP server before background workers.
 await safeImport("./v10-server-release.js", true);
