@@ -215,11 +215,12 @@ test("ads and daily normally avoid stored performance RPCs while Leads retain hi
     const res = makeResponse();
     await installedHandler()({ query: { action: "leads", from: "2026-07-01", to: "2026-08-05" } }, res);
     assert.equal(res.payload.source, "core_live_plus_reporting_history");
+    assert.equal(res.payload.data[0].customer_name, "Nguyễn Văn An");
     const leadCall = calls.find((call) => /v8_report_leads_test$/.test(call.url));
     assert.ok(leadCall);
     assert.equal(leadCall.body.p_limit, 250);
     assert.equal(leadCall.body.p_offset, 0);
-  });
+  }, { leadRow: true });
 });
 
 test("Lead rows read names and raw contacts from Core without copying them into Reporting", async () => {
