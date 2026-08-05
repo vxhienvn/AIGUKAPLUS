@@ -49,10 +49,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Run Core and V10 regression tests
+      - name: Run Core regression tests
+        run: node --test tests/v9-*.test.js
+      - name: Restore clean workspace after mutating patch tests
         run: |
-          node --test tests/v9-*.test.js
-          node --test tests/v10-*.test.js
+          git reset --hard HEAD
+          git clean -fd
+      - name: Run V10 regression tests
+        run: node --test tests/v10-*.test.js
       - name: Validate current worker syntax
         run: |
           node --check v9-core-bridge-bootstrap.js
