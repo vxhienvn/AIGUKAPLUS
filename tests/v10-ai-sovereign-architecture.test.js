@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { buildAdvisoryBundle, detectIntentCandidates, detectProductCandidates } from "../v10/core/advisory-engine.js";
 import { buildConversationContext } from "../v10/core/conversation-assembler.js";
@@ -89,16 +90,26 @@ test("AI decision is structurally validated but not rewritten by advisors", () =
   assert.deepEqual(decision.selected_products, ["chau_voi_rua_bat", "sen_tam"]);
 });
 
-test("AI v2 contains lease recovery and provider-aware scheduling before claim", () => {
+test("final AI worker contains lease recovery and provider-aware scheduling before claim", () => {
   const entry = fs.readFileSync(new URL("../v10-ai-worker.js", import.meta.url), "utf8");
-  const source = fs.readFileSync(new URL("../v10-ai-worker-v2.js", import.meta.url), "utf8");
-  assert.match(entry, /v10-ai-worker-v2\.js/);
+  const source = fs.readFileSync(new URL("../v10-ai-worker-final.js", import.meta.url), "utf8");
+  assert.match(entry, /v10-ai-worker-final\.js/);
+  assert.doesNotMatch(entry, /patch-v10-/);
+  assert.match(source, /const VERSION = "v10_ai_quality_guard_v12"/);
   assert.match(source, /recoverStaleProcessing/);
   assert.match(source, /providerAvailability/);
   assert.match(source, /scheduleWithoutClaim/);
   assert.ok(source.indexOf("providerAvailability(providerRows, now)") < source.indexOf("processOne(ready[0]"));
   assert.match(source, /operational_fallback_enabled: false/);
   assert.match(source, /GEMINI_MIN_INTERVAL_MS/);
+  assert.match(source, /AIGUKA_V10_DECISION_INTEGRITY_V9/);
+});
+
+test("final AI worker checksum matches committed artifact", () => {
+  const bytes = fs.readFileSync(new URL("../v10-ai-worker-final.js", import.meta.url));
+  const expected = fs.readFileSync(new URL("../v10-ai-worker-final.sha256", import.meta.url), "utf8").trim();
+  const actual = crypto.createHash("sha256").update(bytes).digest("hex");
+  assert.equal(actual, expected);
 });
 
 test("outbound has safety gates but no contact conversation lock", () => {
