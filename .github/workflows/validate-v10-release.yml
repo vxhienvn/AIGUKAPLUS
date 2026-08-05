@@ -8,69 +8,9 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  materialize-final-ai-worker:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'refactor/v10-final-ai-worker-20260806' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refactor/v10-final-ai-worker-20260806
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Build exact production worker
-        run: |
-          tmp="$(mktemp -d)"
-          cp v10-ai-worker-v2.js "$tmp/"
-          cp \
-            patch-v10-provider-load-balancer.js \
-            patch-v10-provider-load-balancer-v4.js \
-            patch-v10-provider-load-balancer-v5.js \
-            patch-v10-provider-load-balancer-v6.js \
-            patch-v10-decision-integrity-v3.js \
-            patch-v10-decision-integrity-v4.js \
-            patch-v10-decision-integrity-v5.js \
-            patch-v10-decision-integrity-v6.js \
-            patch-v10-decision-integrity-v7.js \
-            patch-v10-decision-integrity-v8.js \
-            patch-v10-decision-integrity-v9.js \
-            "$tmp/"
-          for patch in \
-            patch-v10-provider-load-balancer.js \
-            patch-v10-provider-load-balancer-v4.js \
-            patch-v10-provider-load-balancer-v5.js \
-            patch-v10-provider-load-balancer-v6.js \
-            patch-v10-decision-integrity-v4.js \
-            patch-v10-decision-integrity-v5.js \
-            patch-v10-decision-integrity-v6.js \
-            patch-v10-decision-integrity-v7.js \
-            patch-v10-decision-integrity-v8.js \
-            patch-v10-decision-integrity-v9.js
-          do
-            (cd "$tmp" && node "./$patch")
-          done
-          cp "$tmp/v10-ai-worker-v2.js" v10-ai-worker-final.js
-          node --check v10-ai-worker-final.js
-          grep -Fq 'providerSettings(provider).max_input_chars' v10-ai-worker-final.js
-          grep -Fq 'AIGUKA_V10_DECISION_INTEGRITY_V9' v10-ai-worker-final.js
-          grep -Fq 'v10_ai_quality_guard_v12' v10-ai-worker-final.js
-          sha256sum v10-ai-worker-final.js | awk '{print $1}' > v10-ai-worker-final.sha256
-      - name: Commit generated worker
-        run: |
-          if git diff --quiet -- v10-ai-worker-final.js v10-ai-worker-final.sha256; then
-            echo "Final worker already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add v10-ai-worker-final.js v10-ai-worker-final.sha256
-          git commit -m "Materialize final V10 AI worker"
-          git push origin HEAD:refactor/v10-final-ai-worker-20260806
-
   validate-v10:
     runs-on: ubuntu-latest
     steps:
@@ -92,15 +32,14 @@ jobs:
           node --check v10-direct-core-worker.js
           node --check v10-customer-profile-worker.js
           node --check v10-ai-worker.js
-          node --check v10-ai-worker-v2.js
-          test ! -f v10-ai-worker-final.js || node --check v10-ai-worker-final.js
+          node --check v10-ai-worker-final.js
           node --check v10-outbound-worker.js
           node --check v10-decision-queue-janitor.js
           node --check v10/core/decision-contract.js
           node --check v10/core/conversation-assembler.js
           node --check v10/core/knowledge-advisor.js
 
-      - name: Materialize final V10 AI worker patch chain
+      - name: Verify committed AI worker matches the historical patch chain
         run: |
           tmp="$(mktemp -d)"
           cp v10-ai-worker-v2.js "$tmp/"
@@ -132,14 +71,19 @@ jobs:
             (cd "$tmp" && node "./$patch")
           done
           node --check "$tmp/v10-ai-worker-v2.js"
-          grep -Fq 'providerSettings(provider).max_input_chars' "$tmp/v10-ai-worker-v2.js"
-          grep -Fq 'AIGUKA_V10_DECISION_INTEGRITY_V9' "$tmp/v10-ai-worker-v2.js"
-          grep -Fq 'v10_ai_quality_guard_v12' "$tmp/v10-ai-worker-v2.js"
-          if test -f v10-ai-worker-final.js; then
-            cmp -s "$tmp/v10-ai-worker-v2.js" v10-ai-worker-final.js
-            expected="$(sha256sum v10-ai-worker-final.js | awk '{print $1}')"
-            test "$expected" = "$(tr -d '\n\r ' < v10-ai-worker-final.sha256)"
-          fi
+          cmp -s "$tmp/v10-ai-worker-v2.js" v10-ai-worker-final.js
+          grep -Fq 'providerSettings(provider).max_input_chars' v10-ai-worker-final.js
+          grep -Fq 'AIGUKA_V10_DECISION_INTEGRITY_V9' v10-ai-worker-final.js
+          grep -Fq 'v10_ai_quality_guard_v12' v10-ai-worker-final.js
+          expected="$(sha256sum v10-ai-worker-final.js | awk '{print $1}')"
+          test "$expected" = "$(tr -d '\n\r ' < v10-ai-worker-final.sha256)"
+
+      - name: Confirm entrypoint has no runtime source patching
+        run: |
+          grep -q 'v10-ai-worker-final.js' v10-ai-worker.js
+          ! grep -q 'patch-v10-provider-load-balancer' v10-ai-worker.js
+          ! grep -q 'patch-v10-decision-integrity' v10-ai-worker.js
+          grep -q 'runtime_source_patching: false' v10-ai-worker.js
 
       - name: Validate production migrations
         run: |
