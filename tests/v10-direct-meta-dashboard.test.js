@@ -43,7 +43,10 @@ test("report route uses Meta for budget and Supabase for customer history", () =
 });
 
 test("server materialization installs stable dashboard after legacy patch", () => {
-  assert.ok(start.indexOf('safeImport("./patch-direct-meta-dashboard.js"') > start.indexOf('safeImport("./patch-server.js"')));
+  assert.ok(
+    start.indexOf('safeImport("./patch-direct-meta-dashboard.js"') >
+    start.indexOf('safeImport("./patch-server.js"'),
+  );
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "aiguka-direct-dashboard-"));
   for (const file of ["server-fixed.js", "patch-server.js", "patch-direct-meta-dashboard.js"]) {
     fs.copyFileSync(file, path.join(tmp, file));
