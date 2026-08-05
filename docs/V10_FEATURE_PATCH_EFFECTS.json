@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T20:44:02.684Z",
+  "generated_at": "2026-08-05T20:46:40.462Z",
   "branch": "audit/v10-feature-patch-effects-20260806",
   "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   "results": [
@@ -223,7 +223,13 @@
     {
       "patch": "seed-tong-hop-context.js",
       "classification": "operational_seed",
-      "reason": "May write application data; audited separately and never executed by this source-effect job."
+      "reason": "May write application data; source hash is computed but the seed is not executed by this audit.",
+      "source_files": [
+        "contexts/tong-hop.md",
+        "contexts/tong-hop-overrides.md"
+      ],
+      "content_length": 8694,
+      "seed_hash": "fc1a85ddb315d2720a1b0be64b6d23dc362c596667cc33965cb8334e93f1b68f"
     }
   ],
   "summary": {
