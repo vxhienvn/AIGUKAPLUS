@@ -97,9 +97,10 @@ test("final AI worker contains lease recovery and provider-aware scheduling befo
   assert.doesNotMatch(entry, /patch-v10-/);
   assert.match(source, /const VERSION = "v10_ai_quality_guard_v12"/);
   assert.match(source, /recoverStaleProcessing/);
-  assert.match(source, /providerAvailability/);
-  assert.match(source, /scheduleWithoutClaim/);
-  assert.ok(source.indexOf("providerAvailability(providerRows, now)") < source.indexOf("processOne(ready[0]"));
+  const availability = source.indexOf("const availability = providerAvailability(providerRows, Date.now())");
+  const wait = source.indexOf("scheduleWithoutClaim(row, availability.nextAvailableAt", availability);
+  const process = source.indexOf("processOne(row, availability.available, snapshot)", availability);
+  assert.ok(availability >= 0 && wait > availability && process > wait);
   assert.match(source, /operational_fallback_enabled: false/);
   assert.match(source, /GEMINI_MIN_INTERVAL_MS/);
   assert.match(source, /AIGUKA_V10_DECISION_INTEGRITY_V9/);
