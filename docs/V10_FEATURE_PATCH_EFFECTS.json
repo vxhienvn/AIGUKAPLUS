@@ -1,85 +1,143 @@
 {
-  "generated_at": "2026-08-05T21:00:00.000Z",
+  "generated_at": "2026-08-05T20:54:32.170Z",
   "branch": "audit/v10-feature-patch-effects-20260806",
-  "method": "Sequential clean-checkout source hash comparison. Operational data seeds were not executed.",
+  "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   "results": [
     {
       "patch": "patch-learning-client.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["learning-admin-v2-client.js"]
+      "changed_files": [
+        "learning-admin-v2-client.js"
+      ],
+      "stdout": "[AIGUKA] Prompt branches and automatic reply templates separated in UI",
+      "stderr": ""
     },
     {
       "patch": "patch-bot-page-mode-save.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["bot-control-client.js", "bot-control-ui.js"]
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control-ui.js"
+      ],
+      "stdout": "[AIGUKA] Page mode preference can be saved while runtime safety policy remains enforced",
+      "stderr": ""
     },
     {
       "patch": "patch-bot-page-support-mode.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["bot-control-client.js", "bot-control-ui.js"]
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control-ui.js"
+      ],
+      "stdout": "[AIGUKA] Per-Page SUPPORT mode installed: slide on request, text takeover after configured Sale wait",
+      "stderr": ""
     },
     {
       "patch": "patch-bot-clock-24h.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["bot-control-client.js", "bot-control.html"]
+      "changed_files": [
+        "bot-control-client.js",
+        "bot-control.html"
+      ],
+      "stdout": "[AIGUKA] BOT schedule now uses explicit 24-hour HH:MM inputs",
+      "stderr": ""
     },
     {
       "patch": "patch-ai-context-nav.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["ai-provider-manager.js", "learning-admin-v2.html"]
+      "changed_files": [
+        "ai-provider-manager.js",
+        "learning-admin-v2.html"
+      ],
+      "stdout": "[AIGUKA] Cohere native v2 strict-tools provider test installed\n[AIGUKA] AI provider admin JavaScript syntax repaired\n[AIGUKA] AI Context navigation installed",
+      "stderr": ""
     },
     {
       "patch": "patch-ai-context-card-selection.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["ai-context-center-v3.js"]
+      "changed_files": [
+        "ai-context-center-v3.js"
+      ],
+      "stdout": "[AIGUKA] Context cards now load the selected content reliably",
+      "stderr": ""
     },
     {
       "patch": "patch-meta-pages-messaging-scope.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["meta-facebook-login.js"]
+      "changed_files": [
+        "meta-facebook-login.js"
+      ],
+      "stdout": "[AIGUKA] Meta OAuth requests only valid Page and Messenger scopes",
+      "stderr": ""
     },
     {
       "patch": "patch-drive-v4-key-compat.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["drive-slide-manager-v4.js"]
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive V4 uses existing encrypted Google connection",
+      "stderr": ""
     },
     {
       "patch": "patch-drive-v4-api-key-folder-action.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["drive-slide-manager-v4.js"]
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive V4 folder button opens current Drive folder in API-key mode",
+      "stderr": ""
     },
     {
       "patch": "patch-drive-folder-tree-hierarchy.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["drive-slide-manager-v4.js"]
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Drive folder picker now renders a collapsible hierarchical tree",
+      "stderr": ""
     },
     {
       "patch": "patch-catalog-key-rename.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["public/drive-slides-v8.html", "public/drive-slides-v8-render.js", "src/routes/mappingCenterRoutes.js"]
+      "changed_files": [
+        "public/drive-slides-v8-render.js",
+        "public/drive-slides-v8.html",
+        "src/routes/mappingCenterRoutes.js"
+      ],
+      "stdout": "[AIGUKA] Catalog key editing v2 installed with cache-safe assets",
+      "stderr": ""
     },
     {
       "patch": "patch-slide-generic-carousel.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["drive-slide-manager-v4.js"]
+      "changed_files": [
+        "drive-slide-manager-v4.js"
+      ],
+      "stdout": "[AIGUKA] Test slide now sends one Messenger generic carousel",
+      "stderr": ""
     },
     {
       "patch": "patch-mapping-meta-midnight-delivery.js",
       "classification": "effective_source_patch",
       "status": 0,
-      "changed_files": ["src/routes/mappingCenterRoutes.js"]
+      "changed_files": [
+        "src/routes/mappingCenterRoutes.js"
+      ],
+      "stdout": "[AIGUKA] Mapping Meta midnight delivery patch applied",
+      "stderr": ""
     }
   ],
   "retired": [
@@ -136,7 +194,10 @@
     "classification": "manual_seed_current",
     "startup_imported": false,
     "reason": "The production row already has this source hash; keep the script for explicit maintenance only, not every Railway boot.",
-    "source_files": ["contexts/tong-hop.md", "contexts/tong-hop-overrides.md"],
+    "source_files": [
+      "contexts/tong-hop.md",
+      "contexts/tong-hop-overrides.md"
+    ],
     "content_length": 8694,
     "seed_hash": "fc1a85ddb315d2720a1b0be64b6d23dc362c596667cc33965cb8334e93f1b68f"
   },
