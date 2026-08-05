@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T20:49:41.303Z",
+  "generated_at": "2026-08-05T20:50:49.438Z",
   "branch": "audit/v10-feature-patch-effects-20260806",
   "method": "Sequential clean-checkout source hash comparison. Operational data seeds are not executed.",
   "results": [
@@ -69,11 +69,10 @@
     },
     {
       "patch": "patch-ai-context-center-validation.js",
-      "classification": "no_source_effect",
-      "status": 0,
+      "classification": "missing",
+      "status": 127,
       "changed_files": [],
-      "stdout": "[AIGUKA] Context Center V3 browser script and primary handlers validated",
-      "stderr": ""
+      "stderr": "file missing"
     },
     {
       "patch": "patch-meta-pages-messaging-scope.js",
@@ -149,53 +148,42 @@
     },
     {
       "patch": "patch-outbound-human-takeover.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "outbound-worker.js"
-      ],
-      "stdout": "[AIGUKA] Human takeover preflight installed before outbound Final Gate",
-      "stderr": ""
+      "classification": "missing",
+      "status": 127,
+      "changed_files": [],
+      "stderr": "file missing"
     },
     {
       "patch": "patch-outbound-comment-private-reply.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "outbound-worker.js"
-      ],
-      "stdout": "[AIGUKA] Comment-to-Messenger private reply transport installed",
-      "stderr": ""
+      "classification": "failed",
+      "status": 1,
+      "changed_files": [],
+      "stdout": "",
+      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-comment-private-reply.js:23\n  if (!source.includes(oldFields)) throw new Error(\"OUTBOUND_COMMENT_FIELDS_ANCHOR_NOT_FOUND\");\n                                         ^\n\nError: OUTBOUND_COMMENT_FIELDS_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-comment-private-reply.js:23:42\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
     },
     {
       "patch": "patch-outbound-binary-image-upload.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "outbound-worker.js"
-      ],
-      "stdout": "[AIGUKA] Messenger images now use binary Attachment Upload API",
-      "stderr": ""
+      "classification": "failed",
+      "status": 1,
+      "changed_files": [],
+      "stdout": "",
+      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-binary-image-upload.js:171\n  if (!source.includes(oldBlock)) throw new Error(\"OUTBOUND_IMAGE_UPLOAD_ANCHOR_NOT_FOUND\");\n                                        ^\n\nError: OUTBOUND_IMAGE_UPLOAD_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-binary-image-upload.js:171:41\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
     },
     {
       "patch": "patch-outbound-drive-image-proxy-v2.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "outbound-worker.js"
-      ],
-      "stdout": "[AIGUKA] Messenger images now use the verified Supabase Drive image proxy URL",
-      "stderr": ""
+      "classification": "failed",
+      "status": 1,
+      "changed_files": [],
+      "stdout": "",
+      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-drive-image-proxy-v2.js:42\n  if (!source.includes(oldImageBlock)) throw new Error(\"OUTBOUND_DRIVE_PROXY_IMAGE_ANCHOR_NOT_FOUND\");\n                                             ^\n\nError: OUTBOUND_DRIVE_PROXY_IMAGE_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-drive-image-proxy-v2.js:42:46\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
     },
     {
       "patch": "patch-outbound-marketing-notifications.js",
-      "classification": "effective_source_patch",
-      "status": 0,
-      "changed_files": [
-        "outbound-worker.js"
-      ],
-      "stdout": "[AIGUKA] Marketing messages now use verified notification_messages_token recipients",
-      "stderr": ""
+      "classification": "failed",
+      "status": 1,
+      "changed_files": [],
+      "stdout": "",
+      "stderr": "file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-marketing-notifications.js:13\n  if (!source.includes(oldVersion)) throw new Error(\"OUTBOUND_MARKETING_VERSION_ANCHOR_NOT_FOUND\");\n                                          ^\n\nError: OUTBOUND_MARKETING_VERSION_ANCHOR_NOT_FOUND\n    at file:///home/runner/work/AIGUKAPLUS/AIGUKAPLUS/patch-outbound-marketing-notifications.js:13:43\n    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.20.2"
     },
     {
       "patch": "patch-ai-brain-internal-auth.js",
@@ -234,9 +222,9 @@
   ],
   "summary": {
     "total_source_patches": 21,
-    "effective_source_patches": 20,
-    "no_source_effect": 1,
-    "failed": 0,
-    "missing": 0
+    "effective_source_patches": 15,
+    "no_source_effect": 0,
+    "failed": 4,
+    "missing": 2
   }
 }
