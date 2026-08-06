@@ -17,8 +17,8 @@ test("smart Lead UI keeps one contact column and two filter states", () => {
 
 test("header counters follow visible customer and contact rows", () => {
   const html = enhanceSmartLeadUi("<body></body>");
-  assert.match(html, /aiguka-head-count customer/);
-  assert.match(html, /aiguka-head-count contact/);
+  assert.match(html, /\.aiguka-head-count\.customer/);
+  assert.match(html, /\.aiguka-head-count\.contact/);
   assert.match(html, /setBadge\(customerTh,'customer',visible\.length\)/);
   assert.match(html, /setBadge\(contactTh,'contact',contacts\)/);
 });
