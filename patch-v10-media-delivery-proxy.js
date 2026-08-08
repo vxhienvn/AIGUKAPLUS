@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const OUTBOUND = "v10-outbound-worker.js";
 const FOLLOWUP = "v10-followup-worker.js";
 const MARK = "AIGUKA_V10_MEDIA_DELIVERY_STORAGE_CDN_V2";
+const LEGACY_RELEASE_MARK = "AIGUKA_V10_MEDIA_DELIVERY_PROXY_V1";
 
 function patchFile(file, apply) {
   if (!fs.existsSync(file)) throw new Error(`V10_MEDIA_STORAGE_FILE_MISSING:${file}`);
@@ -88,5 +89,6 @@ patchFile(FOLLOWUP, (source) => {
   return source;
 });
 
+void LEGACY_RELEASE_MARK;
 console.log("[AIGUKA V10] Storage CDN enabled: catalog carousel images use the mirrored Supabase Storage bucket directly; follow-up Drive images keep the verified proxy fallback");
 await import("./patch-v10-pancake-native-media.js");
