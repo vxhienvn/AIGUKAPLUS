@@ -89,3 +89,4 @@ patchFile(FOLLOWUP, (source) => {
 });
 
 console.log("[AIGUKA V10] Storage CDN enabled: catalog carousel images use the mirrored Supabase Storage bucket directly; follow-up Drive images keep the verified proxy fallback");
+await import("./patch-v10-pancake-native-media.js");
