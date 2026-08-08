@@ -173,3 +173,5 @@ if (v9CoreReady) {
 } else {
   console.warn(`[AIGUKA V10] workers not started: isolated Core connection blocked (${v9CoreBridgeState.error || "unknown"})`);
 }
+
+// AIGUKA_DEPLOY_NUDGE_20260809_PANCAKE_NATIVE_MEDIA
