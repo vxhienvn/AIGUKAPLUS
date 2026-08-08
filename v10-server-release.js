@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 
-const VERSION = "v10_server_final_v4_scanned_phone_reporting";
+const VERSION = "v10_server_final_v5_storage_cdn_cutover";
 const serverFile = new URL("./server-v10-final.js", import.meta.url);
 const checksumFile = new URL("./server-v10-final.sha256", import.meta.url);
 
