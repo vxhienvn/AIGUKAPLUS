@@ -5,7 +5,8 @@ const FILE = "v10-outbound-worker.js";
 const MARK = "AIGUKA_V10_PANCAKE_NATIVE_MEDIA_V1";
 
 if (!fs.existsSync(FILE)) throw new Error("V10_PANCAKE_NATIVE_OUTBOUND_MISSING");
-let source = fs.readFileSync(FILE, "utf8");
+const original = fs.readFileSync(FILE, "utf8");
+let source = original;
 
 if (!source.includes(MARK)) {
   if (!source.includes('import { loadActiveMetaConnection } from "./meta-token-store.js";')) {
@@ -39,12 +40,16 @@ if (!source.includes(MARK)) {
   source = source.replace(/const VERSION = "v10_outbound_[^"]+";/, 'const VERSION = "v10_outbound_grouped_media_v12_pancake_native";');
   source += `\n// ${MARK}\n`;
 
-  const syntax = spawnSync(process.execPath, ["--check", FILE], { encoding: "utf8" });
-  if (syntax.status !== 0) throw new Error(`V10_PANCAKE_NATIVE_SYNTAX:${syntax.stderr || syntax.stdout}`);
   if (!source.includes("pancake_native_with_meta_fallback") || !source.includes("sendPancakeNativeMedia")) {
     throw new Error("V10_PANCAKE_NATIVE_INSTALL_FAILED");
   }
+
   fs.writeFileSync(FILE, source, "utf8");
+  const syntax = spawnSync(process.execPath, ["--check", FILE], { encoding: "utf8" });
+  if (syntax.status !== 0) {
+    fs.writeFileSync(FILE, original, "utf8");
+    throw new Error(`V10_PANCAKE_NATIVE_SYNTAX:${syntax.stderr || syntax.stdout}`);
+  }
 }
 
 console.log("[AIGUKA V10] Pancake native media enabled: slide batches are uploaded and sent as Pancake content_ids so all images remain visible in Pancake; Meta generic carousel remains automatic fallback");
