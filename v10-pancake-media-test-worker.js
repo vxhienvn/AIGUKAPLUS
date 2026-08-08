@@ -86,7 +86,7 @@ async function fail(job, error) {
   await core(`v9_jobs?id=eq.${job.id}`, {
     method: "PATCH",
     prefer: "return=minimal",
-    body: { status: "failed", last_error: String(error?.message || error).slice(0, 1200), completed_at: now, locked_by: null, locked_at: null, updated_at: now },
+    body: { status: "dead_letter", last_error: String(error?.message || error).slice(0, 1200), completed_at: now, locked_by: null, locked_at: null, updated_at: now },
   }).catch(() => {});
 }
 
