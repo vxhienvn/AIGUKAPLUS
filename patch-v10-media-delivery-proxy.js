@@ -3,17 +3,17 @@ import { spawnSync } from "node:child_process";
 
 const OUTBOUND = "v10-outbound-worker.js";
 const FOLLOWUP = "v10-followup-worker.js";
-const MARK = "AIGUKA_V10_MEDIA_DELIVERY_PROXY_V1";
+const MARK = "AIGUKA_V10_MEDIA_DELIVERY_STORAGE_CDN_V2";
 
 function patchFile(file, apply) {
-  if (!fs.existsSync(file)) throw new Error(`V10_MEDIA_PROXY_FILE_MISSING:${file}`);
+  if (!fs.existsSync(file)) throw new Error(`V10_MEDIA_STORAGE_FILE_MISSING:${file}`);
   let source = fs.readFileSync(file, "utf8");
   if (source.includes(MARK)) return;
   source = apply(source);
   source += `\n// ${MARK}\n`;
   fs.writeFileSync(file, source, "utf8");
   const syntax = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
-  if (syntax.status !== 0) throw new Error(`V10_MEDIA_PROXY_SYNTAX:${file}:${syntax.stderr || syntax.stdout}`);
+  if (syntax.status !== 0) throw new Error(`V10_MEDIA_STORAGE_SYNTAX:${file}:${syntax.stderr || syntax.stdout}`);
 }
 
 const helper = String.raw`
@@ -24,22 +24,40 @@ function v10DriveFileId(value) {
     const url = new URL(text);
     const queryId = String(url.searchParams.get("id") || "").trim();
     if (queryId) return queryId;
-    const match = url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]{10,200})/);
+    const match = url.pathname.match(/(?:\/file)?\/d\/([A-Za-z0-9_-]{10,200})/);
     return match?.[1] || "";
   } catch {
-    const match = text.match(/(?:[?&]id=|\/file\/d\/)([A-Za-z0-9_-]{10,200})/);
+    const match = text.match(/(?:[?&]id=|(?:\/file)?\/d\/)([A-Za-z0-9_-]{10,200})/);
     return match?.[1] || "";
   }
 }
 
-function v10MessengerImageUrl(value) {
+function v10CatalogStorageBase() {
+  const configured = String(process.env.AIGUKA_CATALOG_STORAGE_PUBLIC_BASE || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const knowledge = String(process.env.AIGUKA_V9_KNOWLEDGE_URL || process.env.SUPABASE_URL || "https://ezygfpeeqbbirdeazene.supabase.co").trim().replace(/\/$/, "");
+  return knowledge + "/storage/v1/object/public/aiguka-catalog-images/by-id";
+}
+
+function v10DriveProxyBase() {
+  const configured = String(process.env.AIGUKA_DRIVE_IMAGE_PROXY_BASE || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const knowledge = String(process.env.AIGUKA_V9_KNOWLEDGE_URL || process.env.SUPABASE_URL || "https://ezygfpeeqbbirdeazene.supabase.co").trim().replace(/\/$/, "");
+  return knowledge + "/functions/v1/aiguka-drive-image-proxy";
+}
+
+function v10CatalogImageUrl(value) {
   const sourceUrl = String(value || "").trim();
   const fileId = v10DriveFileId(sourceUrl);
   if (!fileId) return sourceUrl;
-  const configured = String(process.env.AIGUKA_DRIVE_IMAGE_PROXY_BASE || "").trim().replace(/\/$/, "");
-  const supabase = String(process.env.SUPABASE_URL || "").trim().replace(/\/$/, "");
-  const endpoint = configured || (supabase ? supabase + "/functions/v1/aiguka-drive-image-proxy" : "");
-  return endpoint ? endpoint + "?file_id=" + encodeURIComponent(fileId) : sourceUrl;
+  return v10CatalogStorageBase() + "/" + encodeURIComponent(fileId);
+}
+
+function v10FollowupImageUrl(value) {
+  const sourceUrl = String(value || "").trim();
+  const fileId = v10DriveFileId(sourceUrl);
+  if (!fileId) return sourceUrl;
+  return v10DriveProxyBase() + "?file_id=" + encodeURIComponent(fileId);
 }
 `;
 
@@ -50,24 +68,24 @@ patchFile(OUTBOUND, (source) => {
     "async function sendCarousel(pageId, recipientId, assets) {",
   ];
   const anchor = signatures.find((item) => source.includes(item));
-  if (!anchor) throw new Error("V10_MEDIA_PROXY_OUTBOUND_CAROUSEL_ANCHOR_MISSING");
+  if (!anchor) throw new Error("V10_MEDIA_STORAGE_OUTBOUND_CAROUSEL_ANCHOR_MISSING");
   source = source.replace(anchor, helper + "\n" + anchor);
   const imageAnchor = "image_url: asset.source_url,";
-  if (!source.includes(imageAnchor)) throw new Error("V10_MEDIA_PROXY_OUTBOUND_IMAGE_URL_ANCHOR_MISSING");
-  source = source.replace(imageAnchor, "image_url: v10MessengerImageUrl(asset.source_url),");
-  source = source.replace(/const VERSION = "v10_outbound_[^"]+";/, 'const VERSION = "v10_outbound_grouped_media_v11_drive_proxy";');
+  if (!source.includes(imageAnchor)) throw new Error("V10_MEDIA_STORAGE_OUTBOUND_IMAGE_URL_ANCHOR_MISSING");
+  source = source.replace(imageAnchor, "image_url: v10CatalogImageUrl(asset.source_url),");
+  source = source.replace(/const VERSION = "v10_outbound_[^"]+";/, 'const VERSION = "v10_outbound_grouped_media_v12_storage_cdn";');
   return source;
 });
 
 patchFile(FOLLOWUP, (source) => {
   const anchor = "async function sendImage(pageId, senderId, imageUrl) {";
-  if (!source.includes(anchor)) throw new Error("V10_MEDIA_PROXY_FOLLOWUP_IMAGE_ANCHOR_MISSING");
+  if (!source.includes(anchor)) throw new Error("V10_MEDIA_STORAGE_FOLLOWUP_IMAGE_ANCHOR_MISSING");
   source = source.replace(anchor, helper + "\n" + anchor);
   const urlAnchor = "payload: { url: imageUrl, is_reusable: true }";
-  if (!source.includes(urlAnchor)) throw new Error("V10_MEDIA_PROXY_FOLLOWUP_URL_ANCHOR_MISSING");
-  source = source.replace(urlAnchor, "payload: { url: v10MessengerImageUrl(imageUrl), is_reusable: true }");
-  source = source.replace(/const VERSION = "v10_followup_[^"]+";/, 'const VERSION = "v10_followup_v8_event_v4_media_proxy";');
+  if (!source.includes(urlAnchor)) throw new Error("V10_MEDIA_STORAGE_FOLLOWUP_URL_ANCHOR_MISSING");
+  source = source.replace(urlAnchor, "payload: { url: v10FollowupImageUrl(imageUrl), is_reusable: true }");
+  source = source.replace(/const VERSION = "v10_followup_[^"]+";/, 'const VERSION = "v10_followup_v8_event_v5_storage_compat";');
   return source;
 });
 
-console.log("[AIGUKA V10] Messenger media proxy enabled: Drive images are served through the verified Supabase image endpoint for live carousels and follow-up images");
+console.log("[AIGUKA V10] Storage CDN enabled: catalog carousel images use the mirrored Supabase Storage bucket directly; follow-up Drive images keep the verified proxy fallback");
