@@ -1,0 +1,51 @@
+name: Sync AIGUKA Production
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aiguka-production-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout production repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync from vxhienvn/AIGUKAPLUS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp .github/workflows/sync-vxhienvn.yml /tmp/sync-vxhienvn.yml
+
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/vxhienvn/AIGUKAPLUS.git
+          git fetch upstream main
+
+          git checkout main
+          git reset --hard upstream/main
+
+          mkdir -p .github/workflows
+          cp /tmp/sync-vxhienvn.yml .github/workflows/sync-vxhienvn.yml
+
+          git config user.name "AIGUKA Production Sync"
+          git config user.email "actions@github.com"
+
+          git add -A
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: preserve production sync workflow"
+          fi
+
+          git push --force-with-lease origin main
